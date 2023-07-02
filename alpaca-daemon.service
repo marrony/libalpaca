@@ -1,0 +1,13 @@
+[Unit]
+Description=Alpaca Server for RPi
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/alpaca-daemon --device /dev/ttyUSB0 --baud 9600
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+Alias=alpaca-daemon

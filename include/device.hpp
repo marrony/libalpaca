@@ -32,7 +32,8 @@ class device {
  protected:
   int device_number;
  public:
-  virtual ~device() {}
+  virtual ~device()
+  { }
 
   virtual void set_device_number(int device_number) {
     this->device_number = device_number;
@@ -49,7 +50,7 @@ class device {
   virtual std::string get_driverversion() const = 0;
   virtual int get_interfaceversion() const = 0;
   virtual std::string get_name() const = 0;
-  virtual const std::vector<std::string>& get_supportedactions() const = 0;
+  virtual const std::vector<std::string> get_supportedactions() const = 0;
   virtual deviceinfo_t get_deviceinfo() const = 0;
 };
 

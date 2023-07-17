@@ -62,17 +62,6 @@ struct conversor<std::string> {
   }
 };
 
-template<>
-struct conversor<driver_rate_t> {
-  static driver_rate_t conv(std::string_view v) {
-    int value;
-    if (std::sscanf(v.data(), "%d", &value) == 1) {
-      return static_cast<driver_rate_t>(value);
-    }
-    throw std::invalid_argument(std::string(v));
-  }
-};
-
 template<typename T>
 struct field {
   const char* name;

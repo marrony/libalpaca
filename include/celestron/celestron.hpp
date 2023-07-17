@@ -15,43 +15,417 @@
 
 namespace celestron {
 
-enum class tracking_mode_t : char {
+enum class tracking_mode_kind : std::uint8_t {
   off      = 0,
   alt_azm  = 1,
   eq_north = 2,
   eq_south = 3
 };
 
+  //dev
+  // 16 = azm/ra motor
+  // 17 = alt/de motor
+  // 176 = gps
+  // 178 = rtc
+enum class device_kind : std::uint8_t {
+  azm_motor = 16,
+  alt_motor = 17,
+  gps       = 176,
+  rtc       = 178
+};
+
+enum class passthrough_command_kind : std::uint8_t {
+  slew_variable_positive = 6,
+  slew_variable_negative = 7,
+  slew_fixed_positive = 36,
+  slew_fixed_negative = 37,
+
+  // [ 'P', req_size, dev, cmd/arg0, arg1, arg2, arg3, resp_size ]
+
+  // azm motor
+  // + var azm    = 3, 16, 6, hi, lo, 0, 0
+  // - var azm    = 3, 16, 7, hi, lo, 0, 0
+  // + fix azm    = 2, 16, 36, rate, 0, 0, 0
+  // - fix azm    = 2, 16, 37, rate, 0, 0, 0
+
+  // alt motor
+  // + var alt    = 3, 17, 6, hi, lo, 0, 0
+  // - var alt    = 3, 17, 7, hi, lo, 0, 0
+  // + fix azm    = 2, 17, 36, rate, 0, 0, 0
+  // - fix azm    = 2, 17, 37, rate, 0, 0, 0
+
+  //gps
+  //is gps linked = 1, 176, 55, 0, 0, 0, 1
+  //get latitude  = 1, 176, 1, 0, 0, 0, 3
+  //get longitude = 1, 176, 2, 0, 0, 0, 3
+  //get date      = 1, 176, 3, 0, 0, 0, 2
+  //get year      = 1, 176, 4, 0, 0, 0, 2
+  //get time      = 1, 176, 51, 0, 0, 0, 3
+
+  //rtc
+  //get date      = 1, 178, 3, 0, 0, 0, 2
+  //get year      = 1, 178, 4, 0, 0, 0, 2
+  //get time      = 1, 178, 51, 0, 0, 0, 3
+  //set date      = 3, 178, 131, x, y, 0, 0
+  //set year      = 3, 178, 132, x, y, 0, 0
+  //set time      = 4, 178, 179, x, y, z, 0
+
+  //misc
+  //get dev ver   = 1, dev, 254, 0, 0, 0, 2 
+
+};
+
+struct void_t {};
+
+template<typename T = void_t>
+struct response_base_t {
+  union {
+    struct {
+      T            payload;
+      std::uint8_t always_0x23;
+    };
+    char data[sizeof(T) + sizeof(std::uint8_t)];
+  };
+
+  constexpr response_base_t() = default;
+
+  constexpr auto is_ok() const -> bool {
+    return always_0x23 == '#';
+  }
+};
+
+template<>
+struct response_base_t<void_t> {
+  union {
+    std::uint8_t always_0x23;
+    char data[sizeof(std::uint8_t)];
+  };
+
+  constexpr response_base_t() = default;
+};
+
+template<typename T = void_t>
+struct response_t : response_base_t<T> {
+
+  constexpr response_t() = default;
+
+  [[nodiscard]] constexpr auto is_ok() const -> bool {
+    return response_base_t<T>::always_0x23 == '#';
+  }
+
+  template<typename U>
+  struct is_convertible : std::integral_constant<bool, std::is_enum_v<U> || std::is_integral_v<U>>
+  { };
+
+  template<
+    typename = std::enable_if<is_convertible<T>::value && !std::is_same_v<T, void_t>>
+  >
+  [[nodiscard]] constexpr auto parse(T* args) -> bool {
+    *args = static_cast<T>(response_base_t<T>::payload);
+    return true;
+  }
+
+  template<
+    typename = std::enable_if<!is_convertible<T>::value && !std::is_same_v<T, void_t>>,
+    typename... Args
+  >
+  [[nodiscard]] constexpr auto parse(Args... args) const -> bool {
+    return response_base_t<T>::payload.parse(args...);
+  }
+};
+
+template<std::uint8_t CMD, typename R>
+struct get_command_t {
+  union {
+    std::uint8_t cmd;
+    char data[sizeof(std::uint8_t)];
+  };
+
+  using response_t = response_t<R>;
+
+  constexpr get_command_t()
+  : cmd{CMD}
+  { }
+};
+
+template<std::uint8_t CMD, typename T = void_t, typename R = void_t>
+struct set_command_t {
+  union {
+    struct {
+      std::uint8_t cmd;
+      T            payload;
+    };
+    char data[sizeof(std::uint8_t) + sizeof(T)];
+  };
+
+  using response_t = response_t<R>;
+
+  template<typename... Args>
+  constexpr set_command_t(Args... args)
+  : cmd{CMD}
+  , payload{args...}
+  { }
+
+  template<typename... Args>
+  [[nodiscard]] constexpr auto parse(Args... args) const -> bool {
+    return payload.parse(args...);
+  }
+};
+
+template<std::uint8_t CMD>
+struct set_command_t<CMD, void_t, void_t> {
+  union {
+    std::uint8_t cmd;
+    char data[sizeof(std::uint8_t)];
+  };
+
+  using response_t = response_t<void_t>;
+
+  constexpr set_command_t()
+  : cmd{CMD}
+  { }
+
+  [[nodiscard]] constexpr auto parse() const -> bool {
+    return true;
+  }
+};
+
+struct location_t {
+  std::uint8_t latitude_degree;
+  std::uint8_t latitude_minute;
+  std::uint8_t latitude_second;
+  std::uint8_t is_south;
+  std::uint8_t longitude_degree;
+  std::uint8_t longitude_minute;
+  std::uint8_t longitude_second;
+  std::uint8_t is_west;
+
+  constexpr location_t() = default;
+
+  constexpr location_t(float latitude, float longitude) {
+    alpaca::astronomy::dms_t lat{ latitude };
+    alpaca::astronomy::dms_t lon{ longitude };
+
+    latitude_degree  = static_cast<std::uint8_t>(std::abs(lat.degree));
+    latitude_minute  = static_cast<std::uint8_t>(lat.minute);
+    latitude_second  = static_cast<std::uint8_t>(lat.second);
+    is_south         = static_cast<std::uint8_t>(latitude >= 0 ? 0 : 1);
+    longitude_degree = static_cast<std::uint8_t>(std::abs(lon.degree));
+    longitude_minute = static_cast<std::uint8_t>(lon.minute);
+    longitude_second = static_cast<std::uint8_t>(lon.second);
+    is_west          = static_cast<std::uint8_t>(longitude >= 0 ? 0 : 1);
+  }
+
+  [[nodiscard]] constexpr auto parse(float* latitude, float* longitude) const -> bool {
+    alpaca::astronomy::dms_t lat{ latitude_degree, latitude_minute, latitude_second };
+    alpaca::astronomy::dms_t lon{ longitude_degree, longitude_minute, longitude_second };
+
+    *latitude = is_south == 1 ? -lat.to_decimal() : +lat.to_decimal();
+    *longitude = is_west == 1 ? -lon.to_decimal() : +lon.to_decimal();
+
+    return true;
+  }
+};
+
+struct utcdate_t {
+  std::uint8_t hour;
+  std::uint8_t minute;
+  std::uint8_t second;
+  std::uint8_t month;
+  std::uint8_t day;
+  std::uint8_t year;
+  std::uint8_t offset;
+  std::uint8_t isdst;
+
+  constexpr utcdate_t() = default;
+
+  constexpr utcdate_t(alpaca::utcdate_t utcdate, int offset_micros) {
+    utcdate += offset_micros;
+
+    std::tm local_tm;
+    utcdate.to_local_tm(&local_tm);
+
+    int gmt_offset = local_tm.tm_gmtoff/3600;
+
+    if (gmt_offset < 0)
+      gmt_offset += 256;
+
+    hour   = static_cast<std::uint8_t>(local_tm.tm_hour); // hour (24 hour)
+    minute = static_cast<std::uint8_t>(local_tm.tm_min); // minutes
+    second = static_cast<std::uint8_t>(local_tm.tm_sec); // seconds
+    month  = static_cast<std::uint8_t>(local_tm.tm_mon + 1); // month
+    day    = static_cast<std::uint8_t>(local_tm.tm_mday); // day
+    year   = static_cast<std::uint8_t>(local_tm.tm_year + 1900 - 2000); // year (century is 20)
+    offset = static_cast<std::uint8_t>(gmt_offset); // gmt offset
+    isdst  = static_cast<std::uint8_t>(local_tm.tm_isdst > 0 ? 1 : 0); // 1 dst, 0 std time
+  }
+
+  [[nodiscard]] constexpr auto parse(alpaca::utcdate_t* utcdate) const -> bool {
+    int gmt_offset = offset;
+
+    if (gmt_offset > 127)
+      gmt_offset -= 256;
+
+    std::tm local_tm;
+    local_tm.tm_hour   = hour;
+    local_tm.tm_min    = minute;
+    local_tm.tm_sec    = second;
+    local_tm.tm_mon    = month - 1;
+    local_tm.tm_mday   = day;
+    local_tm.tm_year   = year + 2000 - 1900;
+    local_tm.tm_gmtoff = gmt_offset;
+    local_tm.tm_isdst  = isdst;
+
+    *utcdate = alpaca::utcdate_t::from_local_tm(&local_tm);
+
+    return true;
+  }
+};
+
+struct version_t {
+  std::uint8_t major;
+  std::uint8_t minor;
+
+  constexpr version_t() = default;
+
+  [[nodiscard]] constexpr auto parse(std::int32_t* major, std::int32_t* minor) const -> bool {
+    *major = this->major;
+    *minor = this->minor;
+    return true;
+  }
+};
+
+using get_location_t = get_command_t<'w', location_t>;
+using set_location_t = set_command_t<'W', location_t>;
+
+using get_utcdate_t = get_command_t<'h', utcdate_t>;
+using set_utcdate_t = set_command_t<'H', utcdate_t>;
+
+
+struct alignas(1) passthrough_command_t {
+  // [ 'P', req_size, dev, cmd/arg0, arg1, arg2, arg3, resp_size ]
+  std::uint8_t always_P;
+  std::uint8_t request_arguments;
+  device_kind device;
+  passthrough_command_kind command;
+  std::uint8_t args[3];
+  std::uint8_t response_arguments;
+
+  constexpr passthrough_command_t() = default;
+
+  constexpr passthrough_command_t(device_kind device, passthrough_command_kind command, char arg0, char arg1, char arg2, char args_size, char response_size) {
+    this->always_P = 'P';
+    this->request_arguments = args_size + 1;
+    this->device = device;
+    this->command = command;
+    this->args[0] = arg0;
+    this->args[1] = arg1;
+    this->args[2] = arg2;
+    this->response_arguments = response_size;
+  }
+};
+
+struct slew_variable_command_t {
+  union {
+    passthrough_command_t cmd;
+    char data[8];
+  };
+
+  constexpr slew_variable_command_t(int axis, float rate) {
+    int rate_abs = static_cast<int>(std::abs(rate * 3600 * 4)); //arcseconds/second
+
+    passthrough_command_kind command = rate >= 0
+        ? passthrough_command_kind::slew_variable_negative
+        : passthrough_command_kind::slew_variable_positive;
+
+    device_kind device = axis == 0
+        ? device_kind::azm_motor
+        : device_kind::alt_motor;
+
+    char hi = static_cast<char>((rate_abs >> 8) & 0xff);
+    char lo = static_cast<char>(rate_abs & 0xff);
+
+    std::construct_at(&cmd, device, command, hi, lo, 0, 2, 0);
+  }
+
+  [[nodiscard]] constexpr auto parse(int* axis, float* rate) const -> bool {
+    std::int32_t rate_int = cmd.args[0] << 8 | cmd.args[1];
+
+    switch (cmd.device) {
+      case device_kind::azm_motor:
+        *axis = 0;
+        break;
+
+      case device_kind::alt_motor:
+        *axis = 1;
+        break;
+
+      default:
+        return false;
+    }
+
+    switch (cmd.command) {
+      case passthrough_command_kind::slew_variable_positive:
+        *rate = +rate_int / (3600.0f * 4);
+        break;
+
+      case passthrough_command_kind::slew_variable_negative:
+        *rate = -rate_int / (3600.0f * 4);
+        break;
+
+      default:
+        return false;
+    }
+
+    return true;
+  }
+
+};
+
+std::ostream& operator<<(std::ostream& os, const passthrough_command_t& p) {
+  std::cout << p.always_P << std::endl;
+  std::cout << static_cast<int>(p.request_arguments) << std::endl;
+  std::cout << static_cast<int>(p.device) << std::endl;
+  std::cout << static_cast<int>(p.command) << std::endl;
+  std::cout << static_cast<int>(p.args[0]) << std::endl;
+  std::cout << static_cast<int>(p.args[1]) << std::endl;
+  std::cout << static_cast<int>(p.args[2]) << std::endl;
+  std::cout << static_cast<int>(p.response_arguments) << std::endl;
+  return os;
+}
+
 struct nexstar_protocol {
   virtual ~nexstar_protocol() { }
 
   virtual int send_command(
-    const char* in, int in_size, char* out, int out_size) = 0;
+    const void* in, int in_size, void* out, int out_size) = 0;
 
-  bool get_version(int* major, int* minor) {
-    const char command[] = { 'V' };
-    char output[3];
+  bool get_version(std::int32_t* major, std::int32_t* minor) {
+    using get_version_t = get_command_t<'V', version_t>;
 
-    int nbytes = send_command(command, 1, output, 3);
+    const get_version_t command;
+    get_version_t::response_t response;
 
-    if (nbytes != 3) return false;
-    if (output[2] != '#') return false;
+    int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
-    *major = output[0];
-    *minor = output[1];
-    return true;
+    if (nbytes != sizeof(response)) return false;
+    if (!response.is_ok()) return false;
+
+    return response.parse(major, minor);
   }
 
-  bool get_model(int* model) {
-    const char command[] = { 'm' };
-    char output[2];
+  bool get_model(std::int32_t* model) {
+    using get_model_t = get_command_t<'m', std::int32_t>;
 
-    int nbytes = send_command(command, 1, output, 2);
+    const get_model_t command;
+    get_model_t::response_t response;
 
-    if (nbytes != 2) return false;
-    if (output[1] != '#') return false;
+    int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
-    return true;
+    if (nbytes != sizeof(response)) return false;
+    if (!response.is_ok()) return false;
+
+    return response.parse(model);
   }
 
   std::string get_model_string(int model) {
@@ -189,166 +563,158 @@ struct nexstar_protocol {
   }
 
   bool is_goto_in_progress(bool* is_inprogress) {
-    const char command[] = { 'L' };
-    char output[2];
+    using is_goto_inprogress_t = get_command_t<'L', std::uint8_t>;
 
-    int nbytes = send_command(command, 1, output, 2);
+    const is_goto_inprogress_t command;
+    is_goto_inprogress_t::response_t response;
 
-    if (nbytes != 2) return false;
-    if (output[1] != '#') return false;
+    int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
-    *is_inprogress = output[0] == '1';
+    if (nbytes != sizeof(response)) return false;
+    if (!response.is_ok()) return false;
+
+    std::uint8_t value;
+    if (response.parse(&value)) {
+      *is_inprogress = value == '1';
+      return true;
+    }
+
+    return false;
+  }
+
+  [[nodiscard]] bool get_utcdate(alpaca::utcdate_t* utcdate) {
+    const get_utcdate_t command;
+    get_utcdate_t::response_t response;
+
+    int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
+
+    if (nbytes != sizeof(response)) return false;
+    if (!response.is_ok()) return false;
+
+    return response.parse(utcdate);
+  }
+
+  [[nodiscard]] bool set_utcdate(alpaca::utcdate_t utcdate) {
+    const set_utcdate_t command{utcdate, 0};
+    set_utcdate_t::response_t response;
+
+    int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
+
+    if (nbytes != sizeof(response)) return false;
+    if (!response.is_ok()) return false;
 
     return true;
   }
 
-  //bool get_time() {}
-  //bool set_time() {}
+  [[nodiscard]] bool get_location(float* latitude, float* longitude) {
+    const get_location_t command;
+    get_location_t::response_t response;
 
-  bool get_location(
-    float* latitude,
-    float* longitude) {
-    const char command[] = { 'w' };
-    char output[9];
+    int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
-    int nbytes = send_command(command, 1, output, 9);
+    if (nbytes != sizeof(response)) return false;
+    if (!response.is_ok()) return false;
 
-    if (nbytes != 9) return false;
-    if (output[8] != '#') return false;
+    return response.parse(latitude, longitude);
+  }
 
-    alpaca::astronomy::dms_t lat{
-      output[0], output[1], output[2]
-    };
+  [[nodiscard]] bool set_location(float latitude, float longitude) {
+    const set_location_t command{latitude, longitude};
+    set_location_t::response_t response;
 
-    alpaca::astronomy::dms_t lon{
-      output[4], output[5], output[6]
-    };
+    int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
-    *latitude = output[3] == 1
-                ? -lat.to_decimal()
-                : +lat.to_decimal();
-
-    *longitude = output[7] == 1
-                ? -lon.to_decimal()
-                : +lon.to_decimal();
+    if (nbytes != sizeof(response)) return false;
+    if (!response.is_ok()) return false;
 
     return true;
   }
 
-  bool set_location(
-    float latitude,
-    float longitude) {
-    alpaca::astronomy::dms_t lat{ latitude };
-    alpaca::astronomy::dms_t lon{ longitude };
+  [[nodiscard]] bool slew_variable(int axis, float rate) {
+    const slew_variable_command_t slew_command{axis, rate};
+    response_t response;
 
-    const char command[] = {
-      'W',
-      static_cast<char>(std::abs(lat.degree) & 0xff),
-      static_cast<char>(lat.minute & 0xff),
-      static_cast<char>(lat.second & 0xff),
-      static_cast<char>(latitude >= 0 ? 0 : 1),
-      static_cast<char>(std::abs(lon.degree) & 0xff),
-      static_cast<char>(lon.minute & 0xff),
-      static_cast<char>(lon.second & 0xff),
-      static_cast<char>(longitude >= 0 ? 0 : 1)
-    };
-    char output[1];
+    int nbytes = send_command(slew_command.data, sizeof(slew_command), response.data, sizeof(response));
 
-    int nbytes = send_command(command, 9, output, 1);
-
-    if (nbytes != 1) return false;
-    if (output[0] != '#') return false;
+    if (nbytes != sizeof(response)) return false;
+    if (!response.is_ok()) return false;
 
     return true;
   }
 
-  bool slew_variable(int axis, float rate) {
-    int rate_abs = static_cast<int>(std::abs(rate * 60 * 60 * 4)); //arcseconds/second
-    char direction = rate >= 0 ? 6 : 7;
-    char axis_op = axis == 0 ? 16 : 17;
+  bool get_tracking_mode(tracking_mode_kind* mode) {
+    using get_tracking_mode_t = get_command_t<'t', tracking_mode_kind>;
 
-    const char command[] = {
-      'P',
-      3,
-      axis_op,
-      direction,
-      static_cast<char>((rate_abs >> 8) & 0xff),
-      static_cast<char>(rate_abs & 0xff),
-      0,
-      0,
-    };
-    char output[1];
+    const get_tracking_mode_t command;
+    get_tracking_mode_t::response_t response;
 
-    int nbytes = send_command(command, 8, output, 1);
+    int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
-    if (nbytes != 1) return false;
-    if (output[0] != '#') return false;
+    if (nbytes != sizeof(response)) return false;
+    if (!response.is_ok()) return false;
 
-    return true;
+    return response.parse(mode);
   }
 
-  bool get_tracking_mode(tracking_mode_t* mode) {
-    const char command[] = { 't' };
-    char output[2];
+  bool set_tracking_mode(tracking_mode_kind mode) {
+    using set_tracking_mode_t = set_command_t<'T', tracking_mode_kind>;
 
-    int nbytes = send_command(command, 1, output, 2);
+    const set_tracking_mode_t command{mode};
+    set_tracking_mode_t::response_t response;
 
-    if (nbytes != 2) return false;
-    if (output[1] != '#') return false;
+    int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
-    *mode = static_cast<tracking_mode_t>(output[0]);
-    return true;
-  }
-
-  bool set_tracking_mode(tracking_mode_t mode) {
-    const char command[] = { 'T', static_cast<char>(mode) };
-    char output[1];
-
-    int nbytes = send_command(command, 2, output, 1);
-
-    if (nbytes != 1) return false;
-    if (output[0] != '#') return false;
+    if (nbytes != sizeof(response)) return false;
+    if (!response.is_ok()) return false;
 
     return true;
   }
 
   bool is_aligned(bool* aligned) {
-    const char command[] = { 'J' };
-    char output[2];
+    using is_aligned_t = get_command_t<'J', bool>;
 
-    int nbytes = send_command(command, 1, output, 2);
+    const is_aligned_t command;
+    is_aligned_t::response_t response;
 
-    if (nbytes != 2) return false;
-    if (output[1] != '#') return false;
+    int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
-    *aligned = output[0] == 1;
-    return true;
+    if (nbytes != sizeof(response)) return false;
+    if (!response.is_ok()) return false;
+
+    return response.parse(aligned);
   }
 
   bool cancel_goto() {
-    const char command[] = { 'M' };
-    char output[1];
+    using cancel_goto_t = set_command_t<'M'>;
 
-    int nbytes = send_command(command, 1, output, 1);
+    const cancel_goto_t command;
+    cancel_goto_t::response_t response;
 
-    if (nbytes != 1) return false;
-    if (output[0] != '#') return false;
+    int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
+
+    if (nbytes != sizeof(response)) return false;
+    if (!response.is_ok()) return false;
 
     return true;
   }
 
   bool echo(char ch) {
-    const char command[] = { 'K', ch };
-    char output[2];
+    using echo_t = set_command_t<'K', char, char>;
 
-    int nbytes = send_command(command, 1, output, 2);
+    const echo_t command{ch};
+    echo_t::response_t response;
 
-    if (nbytes != 2) return false;
-    if (output[0] != ch) return false;
-    if (output[1] != '#') return false;
+    int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
+
+printf("%ld %ld %d\n", sizeof(command), sizeof(response), nbytes);
+
+    if (nbytes != sizeof(response)) return false;
+    if (!response.is_ok()) return false;
+    if (response.data[0] != ch) return false;
 
     return true;
   }
+
 };
 
 struct simulator_protocol : nexstar_protocol {
@@ -360,7 +726,7 @@ struct simulator_protocol : nexstar_protocol {
   float latitude;
   float longitude;
 
-  bool is_tracking = false;
+  tracking_mode_kind tracking_mode = tracking_mode_kind::off;
   float slew_rate[2] = {0, 0};
 
   enum class state_kind : int {
@@ -373,38 +739,29 @@ struct simulator_protocol : nexstar_protocol {
 
   alpaca::utcdate_t last_ts = alpaca::utcdate_t::now();
 
-  auto step(float target, float* actual, float delta_time, int axis) -> void {
-    switch (state) {
-      case state_kind::no_op:
-        break;
+  alpaca::utcdate_t utcdate = alpaca::utcdate_t::now();
+  alpaca::utcdate_t utcdate_updated = utcdate;
 
-      case state_kind::slewing:
-      {
-        float diff = target - *actual;
-        float dist = std::sqrt(diff * diff);
+  simulator_protocol() {
+  }
 
-        if (dist <= 0.1f) {
-          *actual = target;
-        } else {
-          float rate = 1.0f;
+  auto step(float target, float* actual, float delta_time) -> void {
+    float diff = target - *actual;
+    float dist = std::sqrt(diff * diff);
 
-          if (dist <= 5.0f)
-            rate = 0.25f;
-          else if (dist <= 10.0f)
-            rate = 0.50f;
-          else if (dist <= 20.0f)
-            rate = 0.75f;
+    if (dist <= 0.1f) {
+      *actual = target;
+    } else {
+      float rate = 1.0f;
 
-          *actual += std::min(diff * rate, 9.0f) * delta_time;
-        }
-        break;
-      }
+      if (dist <= 5.0f)
+        rate = 0.25f;
+      else if (dist <= 10.0f)
+        rate = 0.50f;
+      else if (dist <= 20.0f)
+        rate = 0.75f;
 
-      case state_kind::moving:
-      {
-        *actual += slew_rate[axis] * delta_time;
-        break;
-      }
+      *actual += std::min(diff * rate, 9.0f) * delta_time;
     }
   }
 
@@ -419,8 +776,8 @@ struct simulator_protocol : nexstar_protocol {
 
       case state_kind::slewing:
       {
-        step(target_rightascension, &rightascension, delta_time, 0);
-        step(target_declination, &declination, delta_time, 1);
+        step(target_rightascension, &rightascension, delta_time);
+        step(target_declination, &declination, delta_time);
 
         printf("step(%f) => (%f %f) => (%f %f)\n",
           delta_time, rightascension, declination, target_rightascension, target_declination);
@@ -433,74 +790,75 @@ struct simulator_protocol : nexstar_protocol {
       }
 
       case state_kind::moving:
-        rightascension += slew_rate[0] * delta_time;
-        declination += slew_rate[1] * delta_time;
+        rightascension += slew_rate[0] * delta_time;  // primary axis
+        declination += slew_rate[1] * delta_time;  // secondary axis
         break;
     }
   }
 
   virtual int send_command(
-    const char* in, int in_size, char* out, int out_size) {
+    const void* in_ptr, int in_size, void* out_ptr, int out_size) {
+
+    const char* in = reinterpret_cast<const char*>(in_ptr);
+    char* out = reinterpret_cast<char*>(out_ptr);
 
     step();
 
     switch (in[0]) {
+      case 'K':
+        out[0] = in[1];
+        out[1] = '#';
+        return 2;
+
       case 'V':
         out[0] = 1;
         out[1] = 2;
         out[2] = '#';
-        return 2;
+        return 3;
 
       case 'm':
         out[0] = 20;
         out[1] = '#';
         return 2;
 
-      case 'w':
-      {
-        alpaca::astronomy::dms_t lat{ latitude };
-        alpaca::astronomy::dms_t lon{ longitude };
-
-        out[0] = static_cast<char>(std::abs(lat.degree));
-        out[1] = static_cast<char>(lat.minute);
-        out[2] = static_cast<char>(lat.second);
-        out[3] = static_cast<char>(latitude >= 0 ? 0 : 1);
-        out[4] = static_cast<char>(std::abs(lon.degree));
-        out[5] = static_cast<char>(lon.minute);
-        out[6] = static_cast<char>(lon.second);
-        out[7] = static_cast<char>(longitude >= 0 ? 0 : 1);
+      case 'h':
+        std::construct_at(reinterpret_cast<utcdate_t*>(out), utcdate, alpaca::utcdate_t::now() - utcdate_updated);
         out[8] = '#';
         return 9;
-      }
+
+      case 'H':
+        if (reinterpret_cast<const set_utcdate_t*>(in)->parse(&utcdate)) {
+          out[0] = '#';
+          return 1;
+          utcdate_updated = alpaca::utcdate_t::now();
+        } else {
+          return 0;
+        }
+
+      case 'w':
+        std::construct_at(reinterpret_cast<location_t*>(out), latitude, longitude);
+        out[8] = '#';
+        return 9;
 
       case 'W':
-      {
-        alpaca::astronomy::dms_t lat{ in[1], in[2], in[3] };
-        alpaca::astronomy::dms_t lon{ in[5], in[6], in[7] };
-
-        latitude = in[4] == 1 ? -lat.to_decimal() : +lat.to_decimal();
-        longitude = in[8] == 1 ? -lon.to_decimal() : +lon.to_decimal();
-
-        out[0] = '#';
-        return 1;
-      }
+        if (reinterpret_cast<const set_location_t*>(in)->parse(&latitude, &longitude)) {
+          out[0] = '#';
+          return 1;
+        } else {
+          return 0;
+        }
 
       case 'E':
-      {
-        printf("E: %f %f\n", rightascension, declination);
         std::snprintf(out, out_size + 1, "%04X,%04X#",
           degree_to_nexstar(rightascension, false),
           degree_to_nexstar(declination, false));
         return 10;
-      }
 
       case 'e':
-      {
         std::snprintf(out, out_size + 1, "%08X,%08X#",
           degree_to_nexstar(rightascension, true),
           degree_to_nexstar(declination, true));
         return 18;
-      }
 
       case 'Z':
       {
@@ -510,8 +868,7 @@ struct simulator_protocol : nexstar_protocol {
           alpaca::utcdate_t::now(),
           rightascension, declination,
           latitude, longitude,
-          &azimuth, &altitude
-        );
+          &azimuth, &altitude);
 
         std::snprintf(out, out_size + 1, "%04X,%04X#",
           degree_to_nexstar(azimuth, false),
@@ -545,14 +902,12 @@ struct simulator_protocol : nexstar_protocol {
         return 1;
 
       case 't':
-        out[0] = is_tracking
-                   ? static_cast<char>(tracking_mode_t::eq_north)
-                   : static_cast<char>(tracking_mode_t::off);
+        out[0] = static_cast<char>(tracking_mode);
         out[1] = '#';
         return 2;
 
       case 'T':
-        is_tracking = in[1] != static_cast<char>(tracking_mode_t::off);
+        tracking_mode = static_cast<tracking_mode_kind>(in[1]);
         out[0] = '#';
         return 1;
 
@@ -618,35 +973,29 @@ struct simulator_protocol : nexstar_protocol {
       }
 
       case 'P':
-        switch (in[1]) {
-          case 3:
+        switch (static_cast<passthrough_command_kind>(in[3])) {
+          case passthrough_command_kind::slew_variable_positive:
+          case passthrough_command_kind::slew_variable_negative:
           {
-            std::cout << in[0] << ' ';
-            std::cout << (int)(unsigned char)in[1] << ' '; //3
-            std::cout << (int)(unsigned char)in[2] << ' '; //axis 16, 17
-            std::cout << (int)(unsigned char)in[3] << ' '; //dir 6, 7
-            std::cout << (int)(unsigned char)in[4] << ' '; //hi
-            std::cout << (int)(unsigned char)in[5] << ' '; //lo
-            std::cout << (int)(unsigned char)in[6] << ' '; //0
-            std::cout << (int)(unsigned char)in[7] << std::endl; //0
+            const slew_variable_command_t* slew_command = reinterpret_cast<const slew_variable_command_t*>(in);
 
-            std::uint32_t rate_int = static_cast<std::uint8_t>(in[4]) << 8 | static_cast<std::uint8_t>(in[5]);
-            float rate = rate_int / (3600.0f * 4);
-            int axis = in[2] - 16;
+            float rate;
+            int axis;
 
-            if (in[3] == 7) rate *= -1;
+            if (slew_command->parse(&axis, &rate)) {
+              slew_rate[axis] = rate;
 
-            std::cout << "Rate: " << rate_int << std::endl;
-            std::cout << "Rate: " << rate << std::endl;
-            std::cout << "Axis: " << axis << std::endl;
-
-            slew_rate[axis] = rate;
-
-            state = rate_int != 0 ? state_kind::moving : state_kind::no_op;
+              state = rate != 0 ? state_kind::moving : state_kind::no_op;
+            } else {
+              state = state_kind::no_op;
+            }
 
             out[0] = '#';
             return 1;
           }
+
+          default:
+            break;
         }
         break;
     }
@@ -661,7 +1010,7 @@ struct serial_protocol : nexstar_protocol {
   int baudRate;
 
   virtual int send_command(
-    const char* in, int in_size, char* out, int out_size) {
+    const void* in, int in_size, void* out, int out_size) {
 
     if (!serial.is_open()) {
       if (!serial.open(port, baudRate))
@@ -736,6 +1085,9 @@ class celestron_telescope : public alpaca::telescope {
   , protocol(protocol)
   { }
 
+  virtual ~celestron_telescope()
+  { }
+
   // device
   virtual alpaca::deviceinfo_t get_deviceinfo() const {
     int model = 0;
@@ -750,29 +1102,10 @@ class celestron_telescope : public alpaca::telescope {
     };
   }
 
-  virtual void put_connected(bool connected) {
-    if (is_connected && connected) return;
-    if (!is_connected && !connected) return;
-
-    //if (connected) {
-    //  protocol = create_protocol();
-    //} else {
-    //  protocol = nullptr;
-    //}
-
-    is_connected = connected;
-  }
-
-  virtual bool get_connected() const {
-    return is_connected;
-  }
-
   // telescope
 
   // read-only properties
   virtual float get_altitude() const {
-    check_connected();
-
     float azm, alt;
 
     check_op(protocol->get_azm_alt(&azm, &alt, false));
@@ -781,8 +1114,6 @@ class celestron_telescope : public alpaca::telescope {
   }
 
   virtual float get_azimuth() const {
-    check_connected();
-
     float azm, alt;
 
     check_op(protocol->get_azm_alt(&azm, &alt, false));
@@ -791,8 +1122,6 @@ class celestron_telescope : public alpaca::telescope {
   }
 
   virtual float get_declination() const {
-    check_connected();
-
     float ra, de;
 
     check_op(protocol->get_ra_de(&ra, &de, false));
@@ -801,30 +1130,25 @@ class celestron_telescope : public alpaca::telescope {
   }
 
   virtual float get_rightascension() const {
-    check_connected();
-
     float ra, de;
 
     check_op(protocol->get_ra_de(&ra, &de, false));
 
     return ra;
   }
+
   virtual bool get_athome() const {
-    check_connected();
-    return false;
-   }
-  virtual bool get_atpark() const {
-    check_connected();
     return false;
   }
+
+  virtual bool get_atpark() const {
+    return false;
+  }
+
   virtual bool get_ispulseguiding() const {
-    check_connected();
-    check_flag(get_canpulseguide());
     return false;
   }
   virtual bool get_slewing() const {
-    check_connected();
-
     bool is_slewing;
     check_op(protocol->is_goto_in_progress(&is_slewing));
 
@@ -832,13 +1156,11 @@ class celestron_telescope : public alpaca::telescope {
   }
 
   virtual float get_siderealtime() const {
-    check_connected();
-
     float latitude, longitude;
 
     check_op(protocol->get_location(&latitude, &longitude));
 
-    return alpaca::to_lst(alpaca::utcdate_t::now(), longitude) / 15.0f;
+    return alpaca::astronomy::to_lst(alpaca::utcdate_t::now(), longitude) / 15.0f;
   }
 
   virtual alpaca::destination_side_of_pier_t get_destinationsideofpier(
@@ -847,33 +1169,7 @@ class celestron_telescope : public alpaca::telescope {
   }
 
   // read-wrie properties
-  //virtual bool get_doesrefraction() const { return 0; }
-  //virtual void put_doesrefraction(bool) {}
-
-  virtual float get_guideratedeclination() const {
-    check_connected();
-    return 0;
-  }
-  virtual void put_guideratedeclination(float) {
-    check_connected();
-    check_flag(get_cansetguiderates());
-  }
-
-  virtual float get_guideraterightascension() const {
-    check_connected();
-    return 0;
-  }
-  virtual void put_guideraterightascension(float) {
-    check_connected();
-    check_flag(get_cansetguiderates());
-  }
-
-  virtual int get_sideofpier() const { return 0; }
-  virtual void put_sideofpier(int) {}
-
   virtual float get_sitelatitude() const {
-    check_connected();
-
     float latitude, longitude;
 
     check_op(protocol->get_location(&latitude, &longitude));
@@ -882,9 +1178,6 @@ class celestron_telescope : public alpaca::telescope {
   }
 
   virtual void put_sitelatitude(float angle) {
-    check_connected();
-    check_value(angle >= -90.0f && angle <= +90.0f);
-
     float latitude, longitude;
 
     check_op(protocol->get_location(&latitude, &longitude));
@@ -892,8 +1185,6 @@ class celestron_telescope : public alpaca::telescope {
   }
 
   virtual float get_sitelongitude() const {
-    check_connected();
-
     float latitude, longitude;
 
     check_op(protocol->get_location(&latitude, &longitude));
@@ -902,177 +1193,87 @@ class celestron_telescope : public alpaca::telescope {
   }
 
   virtual void put_sitelongitude(float angle) {
-    check_connected();
-    check_value(angle >= -180.0f && angle <= +180.0f);
-
     float latitude, longitude;
 
     check_op(protocol->get_location(&latitude, &longitude));
     check_op(protocol->set_location(latitude, angle));
   }
 
-  virtual int get_slewsettletime() const {
-    check_connected();
-    not_implemented();
-    return 0;
-  }
-
-  virtual void put_slewsettletime(int) {
-    check_connected();
-    not_implemented();
-  }
-
   float targetdeclination = 100;
   float targetrightascension = 100;
   virtual float get_targetdeclination() const {
-    check_connected();
     check_set(targetdeclination < 100);
     return targetdeclination;
   }
 
   virtual void put_targetdeclination(float targetdeclination) {
-    check_connected();
-    check_value(targetdeclination >= -90.0f && targetdeclination <= +90.0f);
     this->targetdeclination = targetdeclination;
   }
 
   virtual float get_targetrightascension() const {
-    check_connected();
     check_set(targetrightascension < 100);
     return targetrightascension;
   }
 
   virtual void put_targetrightascension(float targetrightascension) {
-    check_connected();
-    check_value(targetrightascension >= 0.0f && targetrightascension <= +24.0f);
     this->targetrightascension = targetrightascension;
   }
 
   virtual bool get_tracking() const {
-    check_connected();
-
-    tracking_mode_t mode;
+    tracking_mode_kind mode;
     check_op(protocol->get_tracking_mode(&mode));
 
-    return mode != tracking_mode_t::off;
+    return mode != tracking_mode_kind::off;
   }
 
   virtual void put_tracking(bool tracking) {
-    check_connected();
-
-    tracking_mode_t mode = tracking ? tracking_mode_t::eq_north : tracking_mode_t::off;
+    tracking_mode_kind mode = tracking ? tracking_mode_kind::eq_north : tracking_mode_kind::off;
 
     check_op(protocol->set_tracking_mode(mode));
   }
 
-  virtual alpaca::driver_rate_t get_trackingrate() const { return alpaca::driver_rate_t::sidereal; }
-  virtual void put_trackingrate(alpaca::driver_rate_t) {}
-
-  std::string utc = "2022-12-04T17:45:31.1234567Z";
-  virtual std::string get_utcdate() const {
-    return utc;
+  virtual alpaca::driver_rate_t get_trackingrate() const {
+    return alpaca::driver_rate_t::sidereal;
   }
 
-  virtual void put_utcdate(const std::string& utc) {
-    this->utc = utc;
+  virtual void put_trackingrate(alpaca::driver_rate_t) {
+  }
 
-    int year, month, day;
-    int hour, minute, seconds, milliseconds;
+  virtual void get_utctm(alpaca::utcdate_t* utcdate) const {
+    check_op(protocol->get_utcdate(utcdate));
+  }
 
-    int count = std::sscanf(
-      utc.c_str(),
-      // 2022-12-04T17:45:31.1234567Z
-      "%04d-%02d-%02dT%02d:%02d:%02d.%dZ",
-      &year, &month, &day, &hour, &minute,
-      &seconds, &milliseconds);
-
-    if (count != 7) {
-      throw alpaca::error::invalid_value();
-    }
+  virtual void put_utctm(alpaca::utcdate_t utcdate) {
+    check_op(protocol->set_utcdate(utcdate));
   }
 
   // operations
   virtual void abortslew() {
-    check_connected();
-
     check_op(protocol->cancel_goto());
   }
 
-  //virtual void findhome() {
-  //  check_connected();
-  //}
-
   virtual void moveaxis(int axis, float rate) {
-    alpaca::telescope::moveaxis(axis, rate);
-
     check_op(protocol->slew_variable(axis, rate));
   }
 
-  //virtual void park() {
-  //  check_connected();
-  //  check_flag(get_canpark());
-  //}
-
-  virtual void pulseguide(int direction, int duration) {
-    check_connected();
-    check_flag(get_canpulseguide());
-  }
-
-  virtual void setpark() {
-    check_connected();
-    check_flag(get_canpark());
-  }
-
-  virtual void slewtoaltaz(float altitude, float azimuth) {
-    throw alpaca::error::not_implemented();
-  }
-
   virtual void slewtoaltazasync(float altitude, float azimuth) {
-    check_connected();
-    check_flag(get_canslewaltazasync());
-    check_value(azimuth >= 0.0f && azimuth <= 360.f);
-    check_value(altitude >= -90.0f && altitude <= +90.f);
-  }
-
-  virtual void slewtocoordinates(float rightascension, float declination) {
-    throw alpaca::error::not_implemented();
   }
 
   virtual void slewtocoordinatesasync(float rightascension, float declination) {
-    check_connected();
-    check_flag(get_canslewasync());
-    check_value(declination >= -90.0f && declination <= +90.0f);
-    check_value(rightascension >= 0.0f && rightascension <= +24.0f);
-
     targetrightascension = rightascension;
     targetdeclination = declination;
     check_op(protocol->goto_ra_de(rightascension, declination, false));
   }
 
-  virtual void slewtotarget() {
-    throw alpaca::error::not_implemented();
-  }
-
   virtual void slewtotargetasync() {
-    check_connected();
-    check_flag(get_canslewasync());
-
     check_op(protocol->goto_ra_de(targetrightascension, targetdeclination, false));
   }
 
   virtual void synctoaltaz(float altitude, float azimuth) {
-    check_connected();
-    check_flag(get_cansyncaltaz());
-    check_value(azimuth >= 0.0f && azimuth <= 360.f);
-    check_value(altitude >= -90.0f && altitude <= +90.f);
   }
 
-  virtual void synctocoordinates(float rightascension, float declination) {
-    check_connected();
-    check_flag(get_cansync());
-    check_value(declination >= -90.0f && declination <= +90.0f);
-    check_value(rightascension >= 0.0f && rightascension <= +24.0f);
-
+  virtual void synctocoordinates(
+    float rightascension, float declination) {
     targetrightascension = rightascension;
     targetdeclination = declination;
 
@@ -1080,18 +1281,7 @@ class celestron_telescope : public alpaca::telescope {
   }
 
   virtual void synctotarget() {
-    check_connected();
-    check_parked();
-    check_flag(get_cansync());
-
     //protocol->goto_ra_de(target_ra, target_de);
-  }
-
-  virtual void unpark() {
-    check_connected();
-
-    if(!get_canunpark())
-      throw alpaca::error::not_implemented();
   }
 };
 

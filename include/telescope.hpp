@@ -17,32 +17,72 @@
 #include <parser.hpp>
 #include <fields.hpp>
 #include <types.hpp>
+#include <time.hpp>
 #include <json.hpp>
 
 namespace alpaca {
 
+enum class driver_rate_t : int {
+  sidereal = 0,
+  lunar,
+  solar,
+  king
+};
+
+struct driver_rate_arcs_t {
+  const float sidereal = 15.0410;
+  const float lunar    = 14.6850;
+  const float solar    = 15.0000;
+  const float king     = 15.0369;
+};
+
+struct axis_rate_t {
+  float minimum;
+  float maximum;
+};
+
+enum class equatorial_system_t : std::int32_t {
+  other = 0,
+  jnow  = 1,
+  j2000 = 2,
+  j2050 = 3,
+  b1950 = 4
+};
+
+enum class alignment_mode_t : std::int32_t {
+  alt_azm = 0,
+  polar   = 1,
+  german  = 2
+};
+
+enum class destination_side_of_pier_t : std::int32_t {
+  pier_unknown = -1,
+  pier_east    = 0,
+  pier_west    = 1,
+};
+
 struct telescope_flags_t {
   enum {
-    NONE                         = 0x00000,
-    CAN_FIND_HOME                = 0x00001,
-    CAN_PARK                     = 0x00002,
-    CAN_PULSE_GUIDE              = 0x00004,
-    CAN_SET_DECLINATION_RATE     = 0x00008,
-    CAN_SET_GUIDE_RATES          = 0x00010,
-    CAN_SET_PARK                 = 0x00020,
-    CAN_SET_PIER_SIDE            = 0x00040,
-    CAN_SET_RIGHT_ASCENSION_RATE = 0x00080,
-    CAN_SET_TRACKING             = 0x00100,
-    CAN_SLEW                     = 0x00200,
-    CAN_SLEW_ALTAZ               = 0x00400,
-    CAN_SLEW_ALTAZ_ASYNC         = 0x00800,
-    CAN_SLEW_ASYNC               = 0x01000,
-    CAN_SYNC                     = 0x02000,
-    CAN_SYNC_ALTAZ               = 0x04000,
-    CAN_UNPARK                   = 0x08000,
-    CAN_MOVE_AXIS_0              = 0x10000,
-    CAN_MOVE_AXIS_1              = 0x20000,
-    CAN_MOVE_AXIS_2              = 0x40000,
+    none                         = 0x00000,
+    can_find_home                = 0x00001,
+    can_park                     = 0x00002,
+    can_pulse_guide              = 0x00004,
+    can_set_declination_rate     = 0x00008,
+    can_set_guide_rates          = 0x00010,
+    can_set_park                 = 0x00020,
+    can_set_pier_side            = 0x00040,
+    can_set_right_ascension_rate = 0x00080,
+    can_set_tracking             = 0x00100,
+    can_slew                     = 0x00200,
+    can_slew_altaz               = 0x00400,
+    can_slew_altaz_async         = 0x00800,
+    can_slew_async               = 0x01000,
+    can_sync                     = 0x02000,
+    can_sync_altaz               = 0x04000,
+    can_unpark                   = 0x08000,
+    can_move_axis_0              = 0x10000,
+    can_move_axis_1              = 0x20000,
+    can_move_axis_2              = 0x40000,
   };
 };
 
@@ -117,24 +157,24 @@ struct move_t {
 };
 
 class telescope : public device {
- protected:
   telescopeinfo_t telescopeinfo;
   bool is_connected;
 
+ protected:
   inline void check_connected() const {
     if (!is_connected) throw error::not_connected();
   }
 
   inline void check_parked() const {
-    if (get_atpark()) throw error::parked();
+    if (priv_get_atpark()) throw error::parked();
   }
 
   inline void check_flag(bool flag) const {
     if (!flag) throw error::not_implemented();
   }
 
-  inline void not_implemented() const {
-    check_flag(false);
+  [[noreturn]] inline void not_implemented() const {
+    throw error::not_implemented();
   }
 
   inline void check_op(bool completed) const  {
@@ -153,24 +193,383 @@ class telescope : public device {
     if (!set) throw error::value_not_set();
   }
 
+ private:
+  // resource needs to be able to call telescope private methods
+  friend class telescope_resource;
+
+  // read-only properties
+  float priv_get_altitude() const {
+    check_connected();
+    return get_altitude();
+  }
+
+  float priv_get_azimuth() const {
+    check_connected();
+    return get_azimuth();
+  }
+
+  float priv_get_declination() const {
+    check_connected();
+    return get_declination();
+  }
+
+  float priv_get_rightascension() const {
+    check_connected();
+    return get_rightascension();
+  }
+
+  bool priv_get_athome() const {
+    check_connected();
+    return get_athome();
+  }
+
+  bool priv_get_atpark() const {
+    check_connected();
+    return get_atpark();
+  }
+
+  bool priv_get_ispulseguiding() const {
+    check_connected();
+    check_flag(get_canpulseguide());
+    return get_ispulseguiding();
+  }
+
+  bool priv_get_slewing() const {
+    check_connected();
+    return get_slewing();
+  }
+
+  float priv_get_siderealtime() const {
+    check_connected();
+    return get_siderealtime();
+  }
+
+  destination_side_of_pier_t priv_get_destinationsideofpier(
+    float rightascension, float declination) const {
+    check_connected();
+    return get_destinationsideofpier(rightascension, declination);
+  }
+
+  // read-wrie properties
+  float priv_get_declinationrate() const {
+    check_connected();
+    return get_declinationrate();
+  }
+
+  void priv_put_declinationrate(float declinationrate) {
+    check_connected();
+    check_flag(get_cansetdeclinationrate());
+
+    put_declinationrate(declinationrate);
+  }
+
+  float priv_get_rightascensionrate() const {
+    check_connected();
+    return get_rightascensionrate();;
+  }
+
+  void priv_put_rightascensionrate(float rightascensionrate) {
+    check_connected();
+    check_flag(get_cansetrightascensionrate());
+
+    put_rightascensionrate(rightascensionrate);
+  }
+
+  bool priv_get_doesrefraction() const {
+    check_connected();
+    return get_doesrefraction();
+  }
+
+  void priv_put_doesrefraction(bool doesrefraction) {
+    check_connected();
+    put_doesrefraction(doesrefraction);
+  }
+
+  float priv_get_guideratedeclination() const {
+    check_connected();
+    return get_guideratedeclination();
+  }
+
+  void priv_put_guideratedeclination(float guideratedeclination) {
+    check_connected();
+    check_flag(get_cansetguiderates());
+    put_guideratedeclination(guideratedeclination);
+  }
+
+  float priv_get_guideraterightascension() const {
+    check_connected();
+    return get_guideraterightascension();
+  }
+
+  void priv_put_guideraterightascension(float guideraterightascension) {
+    check_connected();
+    put_guideraterightascension(guideraterightascension);
+  }
+
+  int priv_get_sideofpier() const {
+    check_connected();
+    return get_sideofpier();
+  }
+
+  void priv_put_sideofpier(int sideofpier) {
+    check_connected();
+    put_sideofpier(sideofpier);
+  }
+
+
+  float priv_get_siteelevation() const {
+    check_connected();
+    return get_siteelevation();
+  }
+
+  void priv_put_siteelevation(float elevation) {
+    check_connected();
+    check_value(elevation >= -300.0f && elevation <= 10000.0f);
+    put_siteelevation(elevation);
+  }
+
+  float priv_get_sitelatitude() const {
+    check_connected();
+    return get_sitelatitude();
+  }
+
+  void priv_put_sitelatitude(float latitude) {
+    check_connected();
+    check_value(latitude >= -90.0f && latitude <= +90.0f);
+
+    put_sitelatitude(latitude);
+  }
+
+  float priv_get_sitelongitude() const {
+    check_connected();
+    return get_sitelongitude();
+  }
+
+  void priv_put_sitelongitude(float angle) {
+    check_connected();
+    check_value(angle >= -180.0f && angle <= +180.0f);
+    put_sitelongitude(angle);
+  }
+
+
+  int priv_get_slewsettletime() const {
+    check_connected();
+    return get_slewsettletime();
+  }
+
+  void priv_put_slewsettletime(int slewsettletime) {
+    check_connected();
+    put_slewsettletime(slewsettletime);
+  }
+
+  float priv_get_targetdeclination() const {
+    check_connected();
+    return get_targetdeclination();
+  }
+
+  void priv_put_targetdeclination(float targetdeclination) {
+    check_connected();
+    check_value(targetdeclination >= -90.0f && targetdeclination <= +90.0f);
+    put_targetdeclination(targetdeclination);
+  }
+
+  float priv_get_targetrightascension() const {
+    check_connected();
+    return get_targetrightascension();
+  }
+
+  void priv_put_targetrightascension(float targetrightascension) {
+    check_connected();
+    check_value(targetrightascension >= 0.0f && targetrightascension <= +24.0f);
+    put_targetrightascension(targetrightascension);
+  }
+
+  bool priv_get_tracking() const {
+    check_connected();
+    return get_tracking();
+  }
+
+  void priv_put_tracking(bool tracking) {
+    check_connected();
+    put_tracking(tracking);
+  }
+
+  driver_rate_t priv_get_trackingrate() const {
+    check_connected();
+    return get_trackingrate();
+  }
+
+  void priv_put_trackingrate(int rate) {
+    check_connected();
+    check_value(rate >= 0 && rate <= 3);
+    put_trackingrate(static_cast<driver_rate_t>(rate));
+  }
+
+  std::string priv_get_utcdate() const {
+    check_connected();
+    return get_utcdate();
+  }
+
+  void priv_put_utcdate(const std::string& utc) {
+    check_connected();
+    put_utcdate(utc);
+  }
+
+  // operations
+  void priv_abortslew() {
+    check_connected();
+
+    abortslew();
+  }
+
+  void priv_findhome() {
+    check_connected();
+    check_flag(get_canfindhome());
+
+    findhome();
+  }
+
+  void priv_moveaxis(int axis, float rate) {
+    check_connected();
+    check_flag(get_canmoveaxis(axis));
+    check_value(rate > -9.0f && rate < +9.0f);
+
+    moveaxis(axis, rate);
+  }
+
+  void priv_park() {
+    check_connected();
+    check_flag(get_canpark());
+
+    park();
+  }
+
+  void priv_pulseguide(int direction, int duration) {
+    check_connected();
+    check_flag(get_canpulseguide());
+
+    pulseguide(direction, duration);
+  }
+
+  void priv_setpark() {
+    check_connected();
+    check_flag(get_cansetpark());
+
+    setpark();
+  }
+
+  void priv_slewtoaltaz(float altitude, float azimuth) {
+    check_connected();
+    check_flag(get_canslewaltaz());
+
+    slewtoaltaz(altitude, azimuth);
+  }
+
+  void priv_slewtoaltazasync(float altitude, float azimuth) {
+    check_connected();
+    check_flag(get_canslewaltazasync());
+    check_value(azimuth >= 0.0f && azimuth <= 360.f);
+    check_value(altitude >= -90.0f && altitude <= +90.f);
+
+    slewtoaltazasync(altitude, azimuth);
+  }
+
+  void priv_slewtocoordinates(
+    float rightascension, float declination) {
+    check_connected();
+
+    slewtocoordinates(rightascension, declination);
+  }
+
+  void priv_slewtocoordinatesasync(
+    float rightascension, float declination) {
+    check_connected();
+    check_flag(get_canslewasync());
+    check_value(declination >= -90.0f && declination <= +90.0f);
+    check_value(rightascension >= 0.0f && rightascension <= +24.0f);
+
+    slewtocoordinatesasync(rightascension, declination);
+  }
+
+  void priv_slewtotarget() {
+    check_connected();
+    check_flag(get_canslewasync());
+
+    slewtotarget();
+  }
+
+  void priv_slewtotargetasync() {
+    check_connected();
+    check_flag(get_canslewasync());
+
+    slewtotargetasync();
+  }
+
+  void priv_synctoaltaz(float altitude, float azimuth) {
+    check_connected();
+    check_flag(get_cansyncaltaz());
+    check_value(azimuth >= 0.0f && azimuth <= 360.f);
+    check_value(altitude >= -90.0f && altitude <= +90.f);
+
+    synctoaltaz(altitude, azimuth);
+  }
+
+  void priv_synctocoordinates(
+    float rightascension, float declination) {
+    check_connected();
+    check_flag(get_cansync());
+    check_value(declination >= -90.0f && declination <= +90.0f);
+    check_value(rightascension >= 0.0f && rightascension <= +24.0f);
+
+    synctocoordinates(rightascension, declination);
+  }
+
+  void priv_synctotarget() {
+    check_connected();
+    check_parked();
+    check_flag(get_cansync());
+
+    synctotarget();
+  }
+
+  void priv_unpark() {
+    check_connected();
+    check_flag(get_canunpark());
+
+    unpark();
+  }
+
  public:
-  explicit telescope(const telescopeinfo_t& telescopeinfo)
-  : telescopeinfo(telescopeinfo)
+  telescope(const telescopeinfo_t& telescopeinfo)
+  : device()
+  , telescopeinfo(telescopeinfo)
   , is_connected(false)
   { }
 
+  virtual ~telescope()
+  { }
+
+  virtual void put_connected(bool connected) {
+    if (is_connected && connected) return;
+    if (!is_connected && !connected) return;
+    is_connected = connected;
+  }
+
+  virtual bool get_connected() const {
+    return is_connected;
+  }
+
   // read-only properties
-  virtual float get_altitude() const = 0;
-  virtual float get_azimuth() const = 0;
-  virtual float get_declination() const = 0;
-  virtual float get_rightascension() const = 0;
-  virtual bool get_athome() const = 0;
-  virtual bool get_atpark() const = 0;
-  virtual bool get_ispulseguiding() const = 0;
-  virtual bool get_slewing() const = 0;
-  virtual float get_siderealtime() const = 0;
-  virtual destination_side_of_pier_t get_destinationsideofpier(
-    float rightascension, float declination) const = 0;
+  virtual float get_altitude() const { not_implemented(); }
+  virtual float get_azimuth() const { not_implemented(); }
+  virtual float get_declination() const { not_implemented(); }
+  virtual float get_rightascension() const { not_implemented(); }
+  virtual bool get_athome() const { not_implemented(); }
+  virtual bool get_atpark() const { not_implemented(); }
+  virtual bool get_ispulseguiding() const { not_implemented(); }
+  virtual bool get_slewing() const { not_implemented(); }
+  virtual float get_siderealtime() const { not_implemented(); }
+  virtual destination_side_of_pier_t get_destinationsideofpier(float rightascension, float declination) const { not_implemented(); }
 
   // constants
   virtual std::string get_description() const { return telescopeinfo.description; }
@@ -178,11 +577,7 @@ class telescope : public device {
   virtual std::string get_driverversion() const { return telescopeinfo.driverversion; }
   virtual int get_interfaceversion() const { return telescopeinfo.interfaceversion; }
   virtual std::string get_name() const { return telescopeinfo.name; }
-  virtual const std::vector<std::string>& get_supportedactions() const {
-    static std::vector<std::string> actions;
-    return actions;
-  }
-  virtual deviceinfo_t get_deviceinfo() const = 0;
+  virtual const std::vector<std::string> get_supportedactions() const { return { }; }
   virtual alignment_mode_t get_alignmentmode() const { return telescopeinfo.alignmentmode; }
   virtual float get_aperturearea() const { return telescopeinfo.aperturearea; }
   virtual float get_aperturediameter() const { return telescopeinfo.aperturediameter; }
@@ -190,173 +585,129 @@ class telescope : public device {
   virtual equatorial_system_t get_equatorialsystem() const {
     return telescopeinfo.equatorialsystem;
   }
-  virtual const std::vector<axis_rate_t>& get_axisrates(int axis) const {
+  virtual const std::vector<axis_rate_t> get_axisrates(int axis) const {
+    check_value(axis >= 0 && axis <= 2);
     return telescopeinfo.axisrates;
   }
-  virtual const std::vector<driver_rate_t>& get_trackingrates() const {
+  virtual const std::vector<driver_rate_t> get_trackingrates() const {
     return telescopeinfo.trackingrates;
   }
 
   // read-wrie properties
-  virtual float get_declinationrate() const {
-    check_connected();
-    return 0;
+  virtual float get_declinationrate() const { return 0; }
+  virtual void put_declinationrate(float) { not_implemented(); }
+  virtual float get_rightascensionrate() const { return 0; }
+  virtual void put_rightascensionrate(float) { not_implemented(); }
+  virtual bool get_doesrefraction() const { not_implemented(); }
+  virtual void put_doesrefraction(bool) { not_implemented(); }
+  float get_guideratedeclination() const { not_implemented(); }
+  virtual void put_guideratedeclination(float) { not_implemented(); }
+  virtual float get_guideraterightascension() const { not_implemented(); }
+  virtual void put_guideraterightascension(float) { not_implemented(); }
+  virtual int get_sideofpier() const { not_implemented(); }
+  virtual void put_sideofpier(int) { not_implemented(); }
+  virtual float get_siteelevation() const { not_implemented(); }
+  virtual void put_siteelevation(float elevation) { not_implemented(); }
+  virtual float get_sitelatitude() const { not_implemented(); }
+  virtual void put_sitelatitude(float) { not_implemented(); }
+  virtual float get_sitelongitude() const { not_implemented(); }
+  virtual void put_sitelongitude(float) { not_implemented(); }
+  virtual int get_slewsettletime() const { not_implemented(); }
+  virtual void put_slewsettletime(int) { not_implemented(); }
+  virtual float get_targetdeclination() const { not_implemented(); }
+  virtual void put_targetdeclination(float) { not_implemented(); }
+  virtual float get_targetrightascension() const { not_implemented(); }
+  virtual void put_targetrightascension(float) { not_implemented(); }
+  virtual bool get_tracking() const { not_implemented(); }
+  virtual void put_tracking(bool) { not_implemented(); }
+  virtual driver_rate_t get_trackingrate() const { not_implemented(); }
+  virtual void put_trackingrate(driver_rate_t rate) { not_implemented(); }
+
+  virtual std::string get_utcdate() const {
+    utcdate_t utcdate;
+
+    get_utctm(&utcdate);
+    return utcdate.format_utc();
   }
 
-  virtual void put_declinationrate(float) {
-    check_connected();
-    check_flag(get_cansetdeclinationrate());
+  virtual void put_utcdate(const std::string& utc) {
+    put_utctm(utcdate_t::parse_utc(utc));
   }
 
-  virtual float get_rightascensionrate() const {
-    check_connected();
-    return 0;
-  }
-
-  virtual void put_rightascensionrate(float) {
-    check_connected();
-    check_flag(get_cansetrightascensionrate());
-  }
-
-  virtual bool get_doesrefraction() const {
-    check_connected();
-    not_implemented();
-    return false;
-  }
-  virtual void put_doesrefraction(bool) {
-    check_connected();
-    not_implemented();
-  }
-
-  virtual float get_guideratedeclination() const = 0;
-  virtual void put_guideratedeclination(float) = 0;
-
-  virtual float get_guideraterightascension() const = 0;
-  virtual void put_guideraterightascension(float) = 0;
-
-  virtual int get_sideofpier() const {
-    check_connected();
-    return 0;
-  }
-
-  virtual void put_sideofpier(int) = 0;
-
-  virtual float get_siteelevation() const {
-    check_connected();
-    not_implemented();
-    return 0.0f;
-  }
-
-  virtual void put_siteelevation(float elevation) {
-    check_connected();
-    check_value(elevation >= -300.0f && elevation <= 10000.0f);
-    not_implemented();
-  }
-
-  virtual float get_sitelatitude() const = 0;
-  virtual void put_sitelatitude(float) = 0;
-
-  virtual float get_sitelongitude() const = 0;
-  virtual void put_sitelongitude(float) = 0;
-
-  virtual int get_slewsettletime() const = 0;
-  virtual void put_slewsettletime(int) = 0;
-
-  virtual float get_targetdeclination() const = 0;
-  virtual void put_targetdeclination(float) = 0;
-
-  virtual float get_targetrightascension() const = 0;
-  virtual void put_targetrightascension(float) = 0;
-
-  virtual bool get_tracking() const = 0;
-  virtual void put_tracking(bool) = 0;
-
-  virtual driver_rate_t get_trackingrate() const = 0;
-  virtual void put_trackingrate(driver_rate_t) = 0;
-
-  virtual std::string get_utcdate() const = 0;
-  virtual void put_utcdate(const std::string& utc) = 0;
+  virtual void get_utctm(utcdate_t*) const { not_implemented(); }
+  virtual void put_utctm(utcdate_t) { not_implemented(); }
 
   // flags
-  virtual bool get_canfindhome() const {
-    return (telescopeinfo.flags & telescope_flags_t::CAN_FIND_HOME);
+  bool get_canfindhome() const {
+    return (telescopeinfo.flags & telescope_flags_t::can_find_home);
   }
-  virtual bool get_canmoveaxis(int axis) const {
-    return telescopeinfo.flags & (telescope_flags_t::CAN_MOVE_AXIS_0 << axis);
+  bool get_canmoveaxis(int axis) const {
+    check_value(axis >= 0 && axis <= 2);
+    return telescopeinfo.flags & (telescope_flags_t::can_move_axis_0 << axis);
   }
-  virtual bool get_canpark() const {
-    return telescopeinfo.flags & telescope_flags_t::CAN_PARK;
+  bool get_canpark() const {
+    return telescopeinfo.flags & telescope_flags_t::can_park;
   }
-  virtual bool get_canpulseguide() const {
-    return telescopeinfo.flags & telescope_flags_t::CAN_PULSE_GUIDE;
+  bool get_canpulseguide() const {
+    return telescopeinfo.flags & telescope_flags_t::can_pulse_guide;
   }
-  virtual bool get_cansetdeclinationrate() const {
-    return telescopeinfo.flags & telescope_flags_t::CAN_SET_DECLINATION_RATE;
+  bool get_cansetdeclinationrate() const {
+    return telescopeinfo.flags & telescope_flags_t::can_set_declination_rate;
   }
-  virtual bool get_cansetguiderates() const {
-    return telescopeinfo.flags & telescope_flags_t::CAN_SET_GUIDE_RATES;
+  bool get_cansetguiderates() const {
+    return telescopeinfo.flags & telescope_flags_t::can_set_guide_rates;
   }
-  virtual bool get_cansetpark() const {
-    return telescopeinfo.flags & telescope_flags_t::CAN_SET_PARK;
+  bool get_cansetpark() const {
+    return telescopeinfo.flags & telescope_flags_t::can_set_park;
   }
-  virtual bool get_cansetpierside() const {
-    return telescopeinfo.flags & telescope_flags_t::CAN_SET_PIER_SIDE;
+  bool get_cansetpierside() const {
+    return telescopeinfo.flags & telescope_flags_t::can_set_pier_side;
   }
-  virtual bool get_cansetrightascensionrate() const {
-    return telescopeinfo.flags & telescope_flags_t::CAN_SET_RIGHT_ASCENSION_RATE;
+  bool get_cansetrightascensionrate() const {
+    return telescopeinfo.flags & telescope_flags_t::can_set_right_ascension_rate;
   }
-  virtual bool get_cansettracking() const {
-    return telescopeinfo.flags & telescope_flags_t::CAN_SET_TRACKING;
+  bool get_cansettracking() const {
+    return telescopeinfo.flags & telescope_flags_t::can_set_tracking;
   }
-  virtual bool get_canslew() const {
-    return telescopeinfo.flags & telescope_flags_t::CAN_SLEW;
+  bool get_canslew() const {
+    return telescopeinfo.flags & telescope_flags_t::can_slew;
   }
-  virtual bool get_canslewaltaz() const {
-    return telescopeinfo.flags & telescope_flags_t::CAN_SLEW_ALTAZ;
+  bool get_canslewaltaz() const {
+    return telescopeinfo.flags & telescope_flags_t::can_slew_altaz;
   }
-  virtual bool get_canslewaltazasync() const {
-    return telescopeinfo.flags & telescope_flags_t::CAN_SLEW_ALTAZ_ASYNC;
+  bool get_canslewaltazasync() const {
+    return telescopeinfo.flags & telescope_flags_t::can_slew_altaz_async;
   }
-  virtual bool get_canslewasync() const {
-    return telescopeinfo.flags & telescope_flags_t::CAN_SLEW_ASYNC;
+  bool get_canslewasync() const {
+    return telescopeinfo.flags & telescope_flags_t::can_slew_async;
   }
-  virtual bool get_cansync() const {
-    return telescopeinfo.flags & telescope_flags_t::CAN_SYNC;
+  bool get_cansync() const {
+    return telescopeinfo.flags & telescope_flags_t::can_sync;
   }
-  virtual bool get_cansyncaltaz() const {
-    return telescopeinfo.flags & telescope_flags_t::CAN_SYNC_ALTAZ;
+  bool get_cansyncaltaz() const {
+    return telescopeinfo.flags & telescope_flags_t::can_sync_altaz;
   }
-  virtual bool get_canunpark() const {
-    return telescopeinfo.flags & telescope_flags_t::CAN_UNPARK;
+  bool get_canunpark() const {
+    return telescopeinfo.flags & telescope_flags_t::can_unpark;
   }
 
   // operations
-  virtual void abortslew() = 0;
-  virtual void findhome() {
-    check_connected();
-    check_flag(get_canfindhome());
-  }
-  virtual void moveaxis(int axis, float rate) {
-    check_connected();
-    check_flag(get_canmoveaxis(axis));
-    check_value(rate > -9.0f && rate < +9.0f);
-  }
-  virtual void park() {
-    check_connected();
-    check_flag(get_canpark());
-  }
-  virtual void pulseguide(int direction, int duration) = 0;
-  virtual void setpark() = 0;
-  virtual void slewtoaltaz(float altitude, float azimuth) = 0;
-  virtual void slewtoaltazasync(float altitude, float azimuth) = 0;
-  virtual void slewtocoordinates(float rightascension, float declination) = 0;
-  virtual void slewtocoordinatesasync(float rightascension, float declination) = 0;
-  virtual void slewtotarget() = 0;
-  virtual void slewtotargetasync() = 0;
-  virtual void synctoaltaz(float altitude, float azimuth) = 0;
-  virtual void synctocoordinates(float rightascension, float declination) = 0;
-  virtual void synctotarget() = 0;
-  virtual void unpark() = 0;
+  virtual void abortslew() { not_implemented(); }
+  virtual void findhome() { not_implemented(); }
+  virtual void moveaxis(int axis, float rate) { not_implemented(); }
+  virtual void park() { not_implemented(); }
+  virtual void pulseguide(int direction, int duration) { not_implemented(); }
+  virtual void setpark() { not_implemented(); }
+  virtual void slewtoaltaz(float altitude, float azimuth) { not_implemented(); }
+  virtual void slewtoaltazasync(float altitude, float azimuth) { not_implemented(); }
+  virtual void slewtocoordinates(float rightascension, float declination) { not_implemented(); }
+  virtual void slewtocoordinatesasync(float rightascension, float declination) { not_implemented(); }
+  virtual void slewtotarget() { not_implemented(); }
+  virtual void slewtotargetasync() { not_implemented(); }
+  virtual void synctoaltaz(float altitude, float azimuth) { not_implemented(); }
+  virtual void synctocoordinates(float rightascension, float declination) { not_implemented(); }
+  virtual void synctotarget() { not_implemented(); }
+  virtual void unpark() { not_implemented(); }
 };
 
 class telescope_resource : public device_resource<telescope> {
@@ -365,35 +716,35 @@ class telescope_resource : public device_resource<telescope> {
   : device_resource("telescope") {
     // read-only properties
     define_get("altitude", [](const telescope* tel, const arguments_t& args) {
-      return tel->get_altitude();
+      return tel->priv_get_altitude();
     });
     define_get("azimuth", [](const telescope* tel, const arguments_t& args) {
-      return tel->get_azimuth();
+      return tel->priv_get_azimuth();
     });
     define_get("declination", [](const telescope* tel, const arguments_t& args) {
-      return tel->get_declination();
+      return tel->priv_get_declination();
     });
     define_get("rightascension", [](const telescope* tel, const arguments_t& args) {
-      return tel->get_rightascension();
+      return tel->priv_get_rightascension();
     });
     define_get("athome", [](const telescope* tel, const arguments_t& args) {
-      return tel->get_athome();
+      return tel->priv_get_athome();
     });
     define_get("atpark", [](const telescope* tel, const arguments_t& args) {
-      return tel->get_atpark();
+      return tel->priv_get_atpark();
     });
     define_get("ispulseguiding", [](const telescope* tel, const arguments_t& args) {
-      return tel->get_ispulseguiding();
+      return tel->priv_get_ispulseguiding();
     });
     define_get("slewing", [](const telescope* tel, const arguments_t& args) {
-      return tel->get_slewing();
+      return tel->priv_get_slewing();
     });
     define_get("siderealtime", [](const telescope* tel, const arguments_t& args) {
-      return tel->get_siderealtime();
+      return tel->priv_get_siderealtime();
     });
     define_get("destinationsideofpier", [](const telescope* tel, const arguments_t& args) {
       coord_t coord = coord_t::parse(args);
-      return static_cast<int>(tel->get_destinationsideofpier(coord.rightascension, coord.declination));
+      return static_cast<int>(tel->priv_get_destinationsideofpier(coord.rightascension, coord.declination));
     });
 
     // constants
@@ -499,193 +850,193 @@ class telescope_resource : public device_resource<telescope> {
     define_ops(
       "declinationrate",
       [](const telescope* tel, const arguments_t& args) {
-        return tel->get_declinationrate();
+        return tel->priv_get_declinationrate();
       },
       [](telescope* tel, const arguments_t& args) {
-        tel->put_declinationrate(
+        tel->priv_put_declinationrate(
           parser::parser_t::parse<float>(args, fields::declinationrate_f));
       });
     define_ops(
       "doesrefraction",
       [](const telescope* tel, const arguments_t& args) {
-        return tel->get_doesrefraction();
+        return tel->priv_get_doesrefraction();
       },
       [](telescope* tel, const arguments_t& args) {
-        tel->put_doesrefraction(
+        tel->priv_put_doesrefraction(
           parser::parser_t::parse<bool>(args, fields::doesrefraction_f));
       });
     define_ops(
       "guideratedeclination",
       [](const telescope* tel, const arguments_t& args) {
-        return tel->get_guideratedeclination();
+        return tel->priv_get_guideratedeclination();
       },
       [](telescope* tel, const arguments_t& args) {
-        tel->put_guideratedeclination(
+        tel->priv_put_guideratedeclination(
           parser::parser_t::parse<float>(args, fields::guideratedeclination_f));
       });
     define_ops(
       "guideraterightascension",
       [](const telescope* tel, const arguments_t& args) {
-        return tel->get_guideraterightascension();
+        return tel->priv_get_guideraterightascension();
       },
       [](telescope* tel, const arguments_t& args) {
-        tel->put_guideraterightascension(
+        tel->priv_put_guideraterightascension(
           parser::parser_t::parse<float>(args, fields::guideraterightascension_f));
       });
     define_ops(
       "rightascensionrate",
       [](const telescope* tel, const arguments_t& args) {
-        return tel->get_rightascensionrate();
+        return tel->priv_get_rightascensionrate();
       },
       [](telescope* tel, const arguments_t& args) {
-        tel->put_rightascensionrate(
+        tel->priv_put_rightascensionrate(
           parser::parser_t::parse<float>(args, fields::rightascensionrate_f));
       });
     define_ops(
       "sideofpier",
       [](const telescope* tel, const arguments_t& args) {
-        return tel->get_sideofpier();
+        return tel->priv_get_sideofpier();
       },
       [](telescope* tel, const arguments_t& args) {
-        tel->put_sideofpier(parser::parser_t::parse<int>(args, fields::sideofpier_f));
+        tel->priv_put_sideofpier(parser::parser_t::parse<int>(args, fields::sideofpier_f));
       });
     define_ops(
       "siteelevation",
       [](const telescope* tel, const arguments_t& args) {
-        return tel->get_siteelevation();
+        return tel->priv_get_siteelevation();
       },
       [](telescope* tel, const arguments_t& args) {
-        tel->put_siteelevation(
+        tel->priv_put_siteelevation(
           parser::parser_t::parse<float>(args, fields::siteelevation_f));
       });
     define_ops(
       "sitelatitude",
       [](const telescope* tel, const arguments_t& args) {
-        return tel->get_sitelatitude();
+        return tel->priv_get_sitelatitude();
       },
       [](telescope* tel, const arguments_t& args) {
-        tel->put_sitelatitude(
+        tel->priv_put_sitelatitude(
           parser::parser_t::parse<float>(args, fields::sitelatitude_f));
       });
     define_ops(
       "sitelongitude",
       [](const telescope* tel, const arguments_t& args) {
-        return tel->get_sitelongitude();
+        return tel->priv_get_sitelongitude();
       },
       [](telescope* tel, const arguments_t& args) {
-        tel->put_sitelongitude(
+        tel->priv_put_sitelongitude(
           parser::parser_t::parse<float>(args, fields::sitelongitude_f));
       });
     define_ops(
       "slewsettletime",
       [](const telescope* tel, const arguments_t& args) {
-        return tel->get_slewsettletime();
+        return tel->priv_get_slewsettletime();
       },
       [](telescope* tel, const arguments_t& args) {
-        tel->put_slewsettletime(
+        tel->priv_put_slewsettletime(
           parser::parser_t::parse<int>(args, fields::slewsettletime_f));
       });
     define_ops(
       "targetdeclination",
       [](const telescope* tel, const arguments_t& args) {
-        return tel->get_targetdeclination();
+        return tel->priv_get_targetdeclination();
       },
       [](telescope* tel, const arguments_t& args) {
-        tel->put_targetdeclination(
+        tel->priv_put_targetdeclination(
           parser::parser_t::parse<float>(args, fields::targetdeclination_f));
       });
     define_ops(
       "targetrightascension",
       [](const telescope* tel, const arguments_t& args) {
-        return tel->get_targetrightascension();
+        return tel->priv_get_targetrightascension();
       },
       [](telescope* tel, const arguments_t& args) {
-        tel->put_targetrightascension(
+        tel->priv_put_targetrightascension(
           parser::parser_t::parse<float>(args, fields::targetrightascension_f));
       });
     define_ops(
       "tracking",
       [](const telescope* tel, const arguments_t& args) {
-        return tel->get_tracking();
+        return tel->priv_get_tracking();
       },
       [](telescope* tel, const arguments_t& args) {
-        tel->put_tracking(parser::parser_t::parse<bool>(args, fields::tracking_f));
+        tel->priv_put_tracking(parser::parser_t::parse<bool>(args, fields::tracking_f));
       });
     define_ops(
       "trackingrate",
       [](const telescope* tel, const arguments_t& args) {
-        return static_cast<int>(tel->get_trackingrate());
+        return static_cast<json_int>(tel->priv_get_trackingrate());
       },
       [](telescope* tel, const arguments_t& args) {
-        tel->put_trackingrate(
-          parser::parser_t::parse<driver_rate_t>(args, fields::trackingrate_f));
+        tel->priv_put_trackingrate(
+          parser::parser_t::parse<int>(args, fields::trackingrate_f));
       });
     define_ops(
       "utcdate",
       [](const telescope* tel, const arguments_t& args) {
-        return tel->get_utcdate();
+        return tel->priv_get_utcdate();
       },
       [](telescope* tel, const arguments_t& args) {
         auto utc = parser::parser_t::parse<std::string>(args, fields::utcdate_f);
-        tel->put_utcdate(utc);
+        tel->priv_put_utcdate(utc);
       });
 
     // operations
     define_put("abortslew", [](telescope* tel, const arguments_t& args) {
-      tel->abortslew();
+      tel->priv_abortslew();
     });
     define_put("findhome", [](telescope* tel, const arguments_t& args) {
-      tel->findhome();
+      tel->priv_findhome();
     });
     define_put("setpark", [](telescope* tel, const arguments_t& args) {
-      tel->setpark();
+      tel->priv_setpark();
     });
     define_put("park", [](telescope* tel, const arguments_t& args) {
-      tel->park();
+      tel->priv_park();
     });
     define_put("slewtotarget", [](telescope* tel, const arguments_t& args) {
-      tel->slewtotarget();
+      tel->priv_slewtotarget();
     });
     define_put("slewtotargetasync", [](telescope* tel, const arguments_t& args) {
-      tel->slewtotargetasync();
+      tel->priv_slewtotargetasync();
     });
     define_put("synctotarget", [](telescope* tel, const arguments_t& args) {
-      tel->synctotarget();
+      tel->priv_synctotarget();
     });
     define_put("unpark", [](telescope* tel, const arguments_t& args) {
-      tel->unpark();
+      tel->priv_unpark();
     });
     define_put("moveaxis", [](telescope* tel, const arguments_t& args) {
       move_t move = move_t::parse(args);
-      tel->moveaxis(move.axis, move.rate);
+      tel->priv_moveaxis(move.axis, move.rate);
     });
     define_put("pulseguide", [](telescope* tel, const arguments_t& args) {
       pulse_t pulse = pulse_t::parse(args);
-      tel->pulseguide(pulse.direction, pulse.duration);
+      tel->priv_pulseguide(pulse.direction, pulse.duration);
     });
     define_put("slewtoaltaz", [](telescope* tel, const arguments_t& args) {
       altazm_t altazm = altazm_t::parse(args);
-      tel->slewtoaltaz(altazm.altitude, altazm.azimuth);
+      tel->priv_slewtoaltaz(altazm.altitude, altazm.azimuth);
     });
     define_put("slewtoaltazasync", [](telescope* tel, const arguments_t& args) {
       altazm_t altazm = altazm_t::parse(args);
-      tel->slewtoaltazasync(altazm.altitude, altazm.azimuth);
+      tel->priv_slewtoaltazasync(altazm.altitude, altazm.azimuth);
     });
     define_put("slewtocoordinates", [](telescope* tel, const arguments_t& args) {
       coord_t coord = coord_t::parse(args);
-      tel->slewtocoordinates(coord.rightascension, coord.declination);
+      tel->priv_slewtocoordinates(coord.rightascension, coord.declination);
     });
     define_put("slewtocoordinatesasync", [](telescope* tel, const arguments_t& args) {
       coord_t coord = coord_t::parse(args);
-      tel->slewtocoordinatesasync(coord.rightascension, coord.declination);
+      tel->priv_slewtocoordinatesasync(coord.rightascension, coord.declination);
     });
     define_put("synctoaltaz", [](telescope* tel, const arguments_t& args) {
       altazm_t altazm = altazm_t::parse(args);
-      tel->synctoaltaz(altazm.altitude, altazm.azimuth);
+      tel->priv_synctoaltaz(altazm.altitude, altazm.azimuth);
     });
     define_put("synctocoordinates", [](telescope* tel, const arguments_t& args) {
       coord_t coord = coord_t::parse(args);
-      tel->synctocoordinates(coord.rightascension, coord.declination);
+      tel->priv_synctocoordinates(coord.rightascension, coord.declination);
     });
   }
 };

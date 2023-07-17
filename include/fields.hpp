@@ -4,7 +4,6 @@
 #define INCLUDE_FIELDS_HPP_
 
 #include <string>
-#include <types.hpp>
 #include <parser.hpp>
 
 namespace alpaca {
@@ -39,7 +38,7 @@ constexpr const parser::field<int> direction_f = { "Direction" };
 constexpr const parser::field<int> duration_f = { "Duration" };
 constexpr const parser::field<int> sideofpier_f = { "SideOfPier" };
 constexpr const parser::field<int> slewsettletime_f = { "SlewSettleTime" };
-constexpr const parser::field<driver_rate_t> trackingrate_f = { "TrackingRate" };
+constexpr const parser::field<int> trackingrate_f = { "TrackingRate" };
 
 // string fields
 constexpr const parser::field<std::string> utcdate_f = { "UTCDate" };

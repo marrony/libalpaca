@@ -89,11 +89,15 @@ int main(int argc, char** argv) {
       .minimum = 0,
       .maximum = 8,
     }},
-    .trackingrates = {},
-    .flags = alpaca::telescope_flags_t::CAN_SLEW_ASYNC | alpaca::telescope_flags_t::CAN_SLEW_ALTAZ_ASYNC |
-             alpaca::telescope_flags_t::CAN_SYNC | alpaca::telescope_flags_t::CAN_SYNC_ALTAZ |
-             alpaca::telescope_flags_t::CAN_SET_TRACKING | alpaca::telescope_flags_t::CAN_MOVE_AXIS_0 |
-             alpaca::telescope_flags_t::CAN_MOVE_AXIS_1
+    .trackingrates = {
+      alpaca::driver_rate_t::sidereal,
+      alpaca::driver_rate_t::lunar,
+      alpaca::driver_rate_t::solar
+    },
+    .flags = alpaca::telescope_flags_t::can_slew_async | alpaca::telescope_flags_t::can_slew_altaz_async |
+             alpaca::telescope_flags_t::can_sync | alpaca::telescope_flags_t::can_sync_altaz |
+             alpaca::telescope_flags_t::can_set_tracking | alpaca::telescope_flags_t::can_move_axis_0 |
+             alpaca::telescope_flags_t::can_move_axis_1
   };
 
   celestron::celestron_telescope tel0(info, protocol);

@@ -109,19 +109,20 @@ class serial {
     return true;
   }
 
-  int read(char* out, int out_size) {
+  int read(void* out, int out_size) {
+    char* out_bytes = reinterpret_cast<char*>(out);
     const int size = out_size;
 
     int nbytes;
-    while ((nbytes = ::read(fd, out, out_size)) > 0) {
-      out += nbytes;
+    while ((nbytes = ::read(fd, out_bytes, out_size)) > 0) {
+      out_bytes += nbytes;
       out_size -= nbytes;
     }
 
     return size - out_size;
   }
 
-  int write(const char* in, int in_size) {
+  int write(const void* in, int in_size) {
     return ::write(fd, in, in_size);
   }
 };

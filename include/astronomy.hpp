@@ -17,13 +17,15 @@ struct dms_t {
   int minute;
   int second;
 
-  dms_t(int degree = 0, int minute = 0, int second = 0)
+  dms_t() = default;
+
+  constexpr dms_t(int degree, int minute, int second)
   : degree(degree)
   , minute(minute)
   , second(second)
   { }
 
-  dms_t(float angle) {
+  constexpr dms_t(float angle) {
     angle = std::fmod(angle, 360.0f);
 
     int angle_secs = angle >= 0
@@ -37,11 +39,36 @@ struct dms_t {
     second = secs % 60;
   }
 
-  float to_decimal() const {
+  constexpr float to_decimal() const {
     float fraction = minute/60.0f + second/3600.0f;
     return degree < 0 ? degree - fraction : degree + fraction;
   }
 };
+
+constexpr float static to_gmst(jdate_t jdate) {
+  double JD = jdate.julian_day();
+  float diff = JD - 2451545.0f;
+  float T = diff / 36525.0f;
+  float theta0 = 280.46061837f + 360.98564736629f * diff + (0.000387933f * T * T) - (T * T * T / 38710000.0f);
+  float angle = std::fmod(theta0, 360.0);
+
+  if (angle < 0.0)
+    angle += 360.0;
+
+  return angle;
+}
+
+constexpr float to_gmst(utcdate_t utc) {
+  return to_gmst(jdate_t::from_utc(utc));
+}
+
+constexpr float to_lst(jdate_t jdate, float longitude) {
+  return to_gmst(jdate) + longitude;
+}
+
+constexpr float to_lst(utcdate_t utc, float longitude) {
+  return to_lst(jdate_t::from_utc(utc), longitude);
+}
 
 void ra_de_to_azm_alt(
   utcdate_t now,
@@ -49,9 +76,9 @@ void ra_de_to_azm_alt(
   float lat, float lon,
   float* azm, float* alt) {
 
-  dms_t lstRA = alpaca::to_lst(now, lon);
+  float lstRA = to_lst(now, lon);
 
-  float ha = lstRA.to_decimal() - ra;
+  float ha = lstRA - ra;
 
   if (ha < 0) ha += 360.0f;
 
@@ -89,7 +116,7 @@ void azm_alt_to_ra_de(
   float k = M_PI / 180.0f;
   float k2 = 180.0f / M_PI;
 
-  dms_t lstRA = alpaca::to_lst(now, lon);
+  float lstRA = to_lst(now, lon);
 
   float sin_de = std::sin(alt*k)*std::sin(lat*k) + std::cos(alt*k)*std::cos(lat*k)*std::cos(azm*k);
   *de = std::asin(sin_de);
@@ -100,7 +127,7 @@ void azm_alt_to_ra_de(
   //if (std::sin(azm*k) < 0)
   //  ha += M_PI;
 
-  *ra = lstRA.to_decimal() - ha;
+  *ra = lstRA - ha;
 }
 
 }  // namespace astronomy

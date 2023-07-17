@@ -3,10 +3,25 @@
 #ifndef INCLUDE_TIME_HPP_
 #define INCLUDE_TIME_HPP_
 
+#include <ctime>
+
 namespace alpaca {
 
 struct utcdate_t {
   std::uint64_t micros;
+
+  utcdate_t& operator+=(int offset_micros) {
+    micros += offset_micros;
+    return *this;
+  }
+
+  constexpr std::int64_t operator-(utcdate_t other) const {
+    return micros - other.micros;
+  }
+
+  constexpr std::time_t to_time_t(int offset = 0) const {
+    return static_cast<std::time_t>((micros+offset) / 1000000);
+  }
 
   static utcdate_t get_system_micros() {
     timeval tv;
@@ -14,12 +29,71 @@ struct utcdate_t {
     return { tv.tv_sec*1000000ull + tv.tv_usec };
   }
 
-  constexpr std::int64_t operator-(utcdate_t other) const {
-    return micros - other.micros;
-  }
-
   static utcdate_t now() noexcept {
     return get_system_micros();
+  }
+
+  static utcdate_t from_time_t(std::time_t time) {
+    return { static_cast<std::uint64_t>(time) * 1000000 };
+  }
+
+  static utcdate_t from_local_tm(const std::tm* local_tm) {
+    std::time_t time = mktime(const_cast<std::tm*>(local_tm));
+    return from_time_t(time);
+  }
+
+  static utcdate_t from_utc_tm(const std::tm* utc_tm) {
+    std::time_t time = timegm(const_cast<std::tm*>(utc_tm));
+    return from_time_t(time);
+  }
+
+  void to_local_tm(std::tm* local_tm) const {
+    std::time_t time = to_time_t();
+    localtime_r(&time, local_tm);
+  }
+
+  void to_utc_tm(std::tm* utc_tm) const {
+    std::time_t time = to_time_t();
+    gmtime_r(&time, utc_tm);
+  }
+
+  static utcdate_t parse_utc(std::string_view utc) {
+    std::tm utc_tm;
+    float seconds;
+
+    int count = std::sscanf(
+      utc.data(),
+      "%04d-%02d-%02dT%02d:%02d:%fZ",
+      &utc_tm.tm_year, &utc_tm.tm_mon,
+      &utc_tm.tm_mday, &utc_tm.tm_hour,
+      &utc_tm.tm_min, &seconds);
+
+    if (count != 6) {
+      throw alpaca::error::invalid_value();
+    }
+
+    utc_tm.tm_year -= 1900;
+    utc_tm.tm_mon -= 1;
+    utc_tm.tm_sec = static_cast<int>(seconds);
+    utc_tm.tm_isdst = -1;
+
+    return utcdate_t::from_utc_tm(&utc_tm);
+  }
+
+  std::string format_utc() const {
+    char utc[32];
+    std::tm utc_tm;
+
+    to_utc_tm(&utc_tm);
+
+    std::snprintf(
+      utc,
+      32,
+      "%04d-%02d-%02dT%02d:%02d:%02dZ",
+      utc_tm.tm_year + 1900, utc_tm.tm_mon + 1, utc_tm.tm_mday,
+      utc_tm.tm_hour, utc_tm.tm_min, utc_tm.tm_sec);
+
+    return utc;
   }
 };
 
@@ -54,31 +128,6 @@ struct jdate_t {
     return from_utc(utcdate_t::now());
   }
 };
-
-constexpr float static to_gmst(jdate_t jdate) {
-  double JD = jdate.julian_day();
-  float diff = JD - 2451545.0f;
-  float T = diff / 36525.0f;
-  float theta0 = 280.46061837f + 360.98564736629f * diff + (0.000387933f * T * T) - (T * T * T / 38710000.0f);
-  float angle = std::fmod(theta0, 360.0);
-
-  if (angle < 0.0)
-    angle += 360.0;
-
-  return angle;
-}
-
-constexpr float static to_gmst(utcdate_t utc) {
-  return to_gmst(jdate_t::from_utc(utc));
-}
-
-constexpr static float to_lst(jdate_t jdate, float longitude) {
-  return to_gmst(jdate) + longitude;
-}
-
-constexpr static float to_lst(utcdate_t utc, float longitude) {
-  return to_lst(jdate_t::from_utc(utc), longitude);
-}
 
 }  // namespace alpaca
 

@@ -8,7 +8,6 @@
 #include <stdexcept>
 #include <string_view>
 #include <util.hpp>
-#include <types.hpp>
 
 namespace alpaca {
 namespace parser {

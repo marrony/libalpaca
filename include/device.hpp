@@ -17,7 +17,6 @@
 #include <json.hpp>
 #include <parser.hpp>
 #include <fields.hpp>
-#include <types.hpp>
 
 namespace alpaca {
 

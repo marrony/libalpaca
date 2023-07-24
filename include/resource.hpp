@@ -10,11 +10,24 @@
 #include <httpserver.hpp>
 
 #include <json.hpp>
-#include <types.hpp>
 #include <util.hpp>
 #include <errors.hpp>
 
 namespace alpaca {
+
+struct comparator_t {
+  std::function<bool(const std::string&, const std::string&)> fn;
+
+  bool operator()(const std::string& a, const std::string& b) const {
+    return fn(a, b);
+  }
+};
+
+using arguments_t = std::map<
+  std::string,
+  std::string,
+  comparator_t
+>;
 
 class alpaca_resource : public httpserver::http_resource {
 

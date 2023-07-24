@@ -75,9 +75,7 @@ enum class passthrough_command_kind : std::uint8_t {
 
 };
 
-struct empty_t {};
-
-template<typename T = empty_t>
+template<typename T>
 struct response_base_t {
   union {
     struct {
@@ -91,13 +89,20 @@ struct response_base_t {
 };
 
 template<>
-struct response_base_t<empty_t> {
+struct response_base_t<void> {
   union {
     std::uint8_t always_0x23;
     char data[sizeof(std::uint8_t)];
   };
 
   constexpr response_base_t() = default;
+};
+
+template<
+  typename Payload,
+  typename... Args
+> concept parseable_t = requires(Payload payload, Args... args) {
+  { payload.parse(args...) } -> std::convertible_to<bool>;
 };
 
 template<typename Payload>
@@ -109,24 +114,27 @@ struct response_t : response_base_t<Payload> {
     return response_base_t<Payload>::always_0x23 == '#';
   }
 
-  template<typename U>
-  struct is_convertible : std::integral_constant<bool, std::is_enum_v<U> || std::is_integral_v<U>>
-  { };
-
-  template<
-    typename = std::enable_if<is_convertible<Payload>::value && !std::is_same_v<Payload, empty_t>>
-  >
-  [[nodiscard]] constexpr auto parse(Payload* args) -> bool {
-    *args = static_cast<Payload>(response_base_t<Payload>::payload);
+  [[nodiscard]] constexpr auto parse() const -> bool requires(std::same_as<Payload, void>) {
     return true;
   }
 
   template<
-    typename = std::enable_if<!is_convertible<Payload>::value && !std::is_same_v<Payload, empty_t>>,
+    typename T
+  >
+  [[nodiscard]] constexpr auto parse(T* args) const -> bool requires(!std::same_as<Payload, void> && std::convertible_to<Payload, T>) {
+    const response_base_t<Payload>& self = *this;
+
+    *args = static_cast<T>(self.payload);
+    return true;
+  }
+
+  template<
     typename... Args
   >
-  [[nodiscard]] constexpr auto parse(Args... args) const -> bool {
-    return response_base_t<Payload>::payload.parse(args...);
+  [[nodiscard]] constexpr auto parse(Args... args) const -> bool requires(parseable_t<Payload, Args...>) {
+    const response_base_t<Payload>& self = *this;
+
+    return self.payload.parse(args...);
   }
 };
 
@@ -148,7 +156,7 @@ struct command_t {
 };
 
 template<std::uint8_t CMD>
-struct command_t<CMD, empty_t> {
+struct command_t<CMD, void> {
   union {
     std::uint8_t cmd;
     char data[sizeof(std::uint8_t)];
@@ -359,11 +367,33 @@ std::ostream& operator<<(std::ostream& os, const passthrough_command_t& p) {
 struct nexstar_protocol {
   virtual ~nexstar_protocol() { }
 
-  virtual int send_command(
+  [[nodiscard]] virtual int send_command(
     const void* in, int in_size, void* out, int out_size) = 0;
 
+#if 0
+  template<
+    std::uint8_t CMD,
+    typename CommandPayload,
+    typename ResponsePayload
+  >
+  [[nodiscard]] bool send_command(
+    const command_t<CMD, CommandPayload>& command,
+    response_t<ResponsePayload>* response) {
+    int nbytes = send_command(
+      command.data,
+      sizeof(command_t<CMD, CommandPayload>),
+      response->data,
+      sizeof(response_t<ResponsePayload>));
+
+    if (nbytes != sizeof(response_t<ResponsePayload>)) return false;
+    if (!response->is_ok()) return false;
+
+    return true;
+  }
+#endif
+
   bool get_version(std::int32_t* major, std::int32_t* minor) {
-    const command_t<'V', empty_t> command;
+    const command_t<'V', void> command;
     response_t<version_t> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
@@ -374,8 +404,8 @@ struct nexstar_protocol {
     return response.parse(major, minor);
   }
 
-  bool get_model(std::int8_t* model) {
-    const command_t<'m', empty_t> command;
+  bool get_model(int* model) {
+    const command_t<'m', void> command;
     response_t<std::int8_t> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
@@ -521,7 +551,7 @@ struct nexstar_protocol {
   }
 
   bool is_goto_in_progress(bool* is_inprogress) {
-    const command_t<'L', empty_t> command;
+    const command_t<'L', void> command;
     response_t<std::uint8_t> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
@@ -539,7 +569,7 @@ struct nexstar_protocol {
   }
 
   [[nodiscard]] bool get_utcdate(alpaca::utcdate_t* utcdate) {
-    const command_t<'h', empty_t> command;
+    const command_t<'h', void> command;
     response_t<utcdate_t> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
@@ -552,18 +582,18 @@ struct nexstar_protocol {
 
   [[nodiscard]] bool set_utcdate(alpaca::utcdate_t utcdate) {
     const command_t<'H', utcdate_t> command{utcdate, 0};
-    response_t<empty_t> response;
+    response_t<void> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
     if (nbytes != sizeof(response)) return false;
     if (!response.is_ok()) return false;
 
-    return true;
+    return response.parse();
   }
 
   [[nodiscard]] bool get_location(float* latitude, float* longitude) {
-    const command_t<'w', empty_t> command;
+    const command_t<'w', void> command;
     response_t<location_t> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
@@ -576,30 +606,30 @@ struct nexstar_protocol {
 
   [[nodiscard]] bool set_location(float latitude, float longitude) {
     const command_t<'W', location_t> command{latitude, longitude};
-    response_t<empty_t> response;
+    response_t<void> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
     if (nbytes != sizeof(response)) return false;
     if (!response.is_ok()) return false;
 
-    return true;
+    return response.parse();
   }
 
   [[nodiscard]] bool slew_variable(int axis, float rate) {
     const slew_variable_command_t slew_command{axis, rate};
-    response_t<empty_t> response;
+    response_t<void> response;
 
     int nbytes = send_command(slew_command.data, sizeof(slew_command), response.data, sizeof(response));
 
     if (nbytes != sizeof(response)) return false;
     if (!response.is_ok()) return false;
 
-    return true;
+    return response.parse();
   }
 
   bool get_tracking_mode(tracking_mode_kind* mode) {
-    const command_t<'t', empty_t> command;
+    const command_t<'t', void> command;
     response_t<tracking_mode_kind> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
@@ -612,18 +642,18 @@ struct nexstar_protocol {
 
   bool set_tracking_mode(tracking_mode_kind mode) {
     const command_t<'T', tracking_mode_kind> command{mode};
-    response_t<empty_t> response;
+    response_t<void> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
     if (nbytes != sizeof(response)) return false;
     if (!response.is_ok()) return false;
 
-    return true;
+    return response.parse();
   }
 
   bool is_aligned(bool* aligned) {
-    const command_t<'J', empty_t> command;
+    const command_t<'J', void> command;
     response_t<bool> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
@@ -635,15 +665,15 @@ struct nexstar_protocol {
   }
 
   bool cancel_goto() {
-    const command_t<'M', empty_t> command;
-    response_t<empty_t> response;
+    const command_t<'M', void> command;
+    response_t<void> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
     if (nbytes != sizeof(response)) return false;
     if (!response.is_ok()) return false;
 
-    return true;
+    return response.parse();
   }
 
   bool echo(char ch) {
@@ -1034,7 +1064,7 @@ class celestron_telescope : public alpaca::telescope {
 
   // device
   virtual alpaca::deviceinfo_t get_deviceinfo() const {
-    std::int8_t model = 0;
+    int model = 0;
 
     check_op(protocol->get_model(&model));
 

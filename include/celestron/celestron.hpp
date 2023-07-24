@@ -75,9 +75,9 @@ enum class passthrough_command_kind : std::uint8_t {
 
 };
 
-struct void_t {};
+struct empty_t {};
 
-template<typename T = void_t>
+template<typename T = empty_t>
 struct response_base_t {
   union {
     struct {
@@ -88,14 +88,10 @@ struct response_base_t {
   };
 
   constexpr response_base_t() = default;
-
-  constexpr auto is_ok() const -> bool {
-    return always_0x23 == '#';
-  }
 };
 
 template<>
-struct response_base_t<void_t> {
+struct response_base_t<empty_t> {
   union {
     std::uint8_t always_0x23;
     char data[sizeof(std::uint8_t)];
@@ -104,13 +100,13 @@ struct response_base_t<void_t> {
   constexpr response_base_t() = default;
 };
 
-template<typename T = void_t>
-struct response_t : response_base_t<T> {
+template<typename Payload>
+struct response_t : response_base_t<Payload> {
 
   constexpr response_t() = default;
 
   [[nodiscard]] constexpr auto is_ok() const -> bool {
-    return response_base_t<T>::always_0x23 == '#';
+    return response_base_t<Payload>::always_0x23 == '#';
   }
 
   template<typename U>
@@ -118,76 +114,49 @@ struct response_t : response_base_t<T> {
   { };
 
   template<
-    typename = std::enable_if<is_convertible<T>::value && !std::is_same_v<T, void_t>>
+    typename = std::enable_if<is_convertible<Payload>::value && !std::is_same_v<Payload, empty_t>>
   >
-  [[nodiscard]] constexpr auto parse(T* args) -> bool {
-    *args = static_cast<T>(response_base_t<T>::payload);
+  [[nodiscard]] constexpr auto parse(Payload* args) -> bool {
+    *args = static_cast<Payload>(response_base_t<Payload>::payload);
     return true;
   }
 
   template<
-    typename = std::enable_if<!is_convertible<T>::value && !std::is_same_v<T, void_t>>,
+    typename = std::enable_if<!is_convertible<Payload>::value && !std::is_same_v<Payload, empty_t>>,
     typename... Args
   >
   [[nodiscard]] constexpr auto parse(Args... args) const -> bool {
-    return response_base_t<T>::payload.parse(args...);
+    return response_base_t<Payload>::payload.parse(args...);
   }
 };
 
-template<std::uint8_t CMD, typename R>
-struct get_command_t {
-  union {
-    std::uint8_t cmd;
-    char data[sizeof(std::uint8_t)];
-  };
-
-  using response_t = response_t<R>;
-
-  constexpr get_command_t()
-  : cmd{CMD}
-  { }
-};
-
-template<std::uint8_t CMD, typename T = void_t, typename R = void_t>
-struct set_command_t {
+template<std::uint8_t CMD, typename Payload>
+struct command_t {
   union {
     struct {
       std::uint8_t cmd;
-      T            payload;
+      Payload      payload;
     };
-    char data[sizeof(std::uint8_t) + sizeof(T)];
+    char data[sizeof(std::uint8_t) + sizeof(Payload)];
   };
 
-  using response_t = response_t<R>;
-
   template<typename... Args>
-  constexpr set_command_t(Args... args)
+  constexpr command_t(Args... args)
   : cmd{CMD}
   , payload{args...}
   { }
-
-  template<typename... Args>
-  [[nodiscard]] constexpr auto parse(Args... args) const -> bool {
-    return payload.parse(args...);
-  }
 };
 
 template<std::uint8_t CMD>
-struct set_command_t<CMD, void_t, void_t> {
+struct command_t<CMD, empty_t> {
   union {
     std::uint8_t cmd;
     char data[sizeof(std::uint8_t)];
   };
 
-  using response_t = response_t<void_t>;
-
-  constexpr set_command_t()
+  constexpr command_t()
   : cmd{CMD}
   { }
-
-  [[nodiscard]] constexpr auto parse() const -> bool {
-    return true;
-  }
 };
 
 struct location_t {
@@ -260,7 +229,7 @@ struct utcdate_t {
     isdst  = static_cast<std::uint8_t>(local_tm.tm_isdst > 0 ? 1 : 0); // 1 dst, 0 std time
   }
 
-  [[nodiscard]] constexpr auto parse(alpaca::utcdate_t* utcdate) const -> bool {
+  [[nodiscard]] auto parse(alpaca::utcdate_t* utcdate) const -> bool {
     int gmt_offset = offset;
 
     if (gmt_offset > 127)
@@ -294,13 +263,6 @@ struct version_t {
     return true;
   }
 };
-
-using get_location_t = get_command_t<'w', location_t>;
-using set_location_t = set_command_t<'W', location_t>;
-
-using get_utcdate_t = get_command_t<'h', utcdate_t>;
-using set_utcdate_t = set_command_t<'H', utcdate_t>;
-
 
 struct alignas(1) passthrough_command_t {
   // [ 'P', req_size, dev, cmd/arg0, arg1, arg2, arg3, resp_size ]
@@ -401,10 +363,8 @@ struct nexstar_protocol {
     const void* in, int in_size, void* out, int out_size) = 0;
 
   bool get_version(std::int32_t* major, std::int32_t* minor) {
-    using get_version_t = get_command_t<'V', version_t>;
-
-    const get_version_t command;
-    get_version_t::response_t response;
+    const command_t<'V', empty_t> command;
+    response_t<version_t> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
@@ -415,10 +375,8 @@ struct nexstar_protocol {
   }
 
   bool get_model(std::int32_t* model) {
-    using get_model_t = get_command_t<'m', std::int32_t>;
-
-    const get_model_t command;
-    get_model_t::response_t response;
+    const command_t<'m', empty_t> command;
+    response_t<std::int32_t> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
@@ -563,10 +521,8 @@ struct nexstar_protocol {
   }
 
   bool is_goto_in_progress(bool* is_inprogress) {
-    using is_goto_inprogress_t = get_command_t<'L', std::uint8_t>;
-
-    const is_goto_inprogress_t command;
-    is_goto_inprogress_t::response_t response;
+    const command_t<'L', empty_t> command;
+    response_t<std::uint8_t> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
@@ -583,8 +539,8 @@ struct nexstar_protocol {
   }
 
   [[nodiscard]] bool get_utcdate(alpaca::utcdate_t* utcdate) {
-    const get_utcdate_t command;
-    get_utcdate_t::response_t response;
+    const command_t<'h', empty_t> command;
+    response_t<utcdate_t> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
@@ -595,8 +551,8 @@ struct nexstar_protocol {
   }
 
   [[nodiscard]] bool set_utcdate(alpaca::utcdate_t utcdate) {
-    const set_utcdate_t command{utcdate, 0};
-    set_utcdate_t::response_t response;
+    const command_t<'H', utcdate_t> command{utcdate, 0};
+    response_t<empty_t> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
@@ -607,8 +563,8 @@ struct nexstar_protocol {
   }
 
   [[nodiscard]] bool get_location(float* latitude, float* longitude) {
-    const get_location_t command;
-    get_location_t::response_t response;
+    const command_t<'w', empty_t> command;
+    response_t<location_t> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
@@ -619,8 +575,8 @@ struct nexstar_protocol {
   }
 
   [[nodiscard]] bool set_location(float latitude, float longitude) {
-    const set_location_t command{latitude, longitude};
-    set_location_t::response_t response;
+    const command_t<'W', location_t> command{latitude, longitude};
+    response_t<empty_t> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
@@ -632,7 +588,7 @@ struct nexstar_protocol {
 
   [[nodiscard]] bool slew_variable(int axis, float rate) {
     const slew_variable_command_t slew_command{axis, rate};
-    response_t response;
+    response_t<empty_t> response;
 
     int nbytes = send_command(slew_command.data, sizeof(slew_command), response.data, sizeof(response));
 
@@ -643,10 +599,8 @@ struct nexstar_protocol {
   }
 
   bool get_tracking_mode(tracking_mode_kind* mode) {
-    using get_tracking_mode_t = get_command_t<'t', tracking_mode_kind>;
-
-    const get_tracking_mode_t command;
-    get_tracking_mode_t::response_t response;
+    const command_t<'t', empty_t> command;
+    response_t<tracking_mode_kind> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
@@ -657,10 +611,8 @@ struct nexstar_protocol {
   }
 
   bool set_tracking_mode(tracking_mode_kind mode) {
-    using set_tracking_mode_t = set_command_t<'T', tracking_mode_kind>;
-
-    const set_tracking_mode_t command{mode};
-    set_tracking_mode_t::response_t response;
+    const command_t<'T', tracking_mode_kind> command{mode};
+    response_t<empty_t> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
@@ -671,10 +623,8 @@ struct nexstar_protocol {
   }
 
   bool is_aligned(bool* aligned) {
-    using is_aligned_t = get_command_t<'J', bool>;
-
-    const is_aligned_t command;
-    is_aligned_t::response_t response;
+    const command_t<'J', empty_t> command;
+    response_t<bool> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
@@ -685,10 +635,8 @@ struct nexstar_protocol {
   }
 
   bool cancel_goto() {
-    using cancel_goto_t = set_command_t<'M'>;
-
-    const cancel_goto_t command;
-    cancel_goto_t::response_t response;
+    const command_t<'M', empty_t> command;
+    response_t<empty_t> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
@@ -699,14 +647,10 @@ struct nexstar_protocol {
   }
 
   bool echo(char ch) {
-    using echo_t = set_command_t<'K', char, char>;
-
-    const echo_t command{ch};
-    echo_t::response_t response;
+    const command_t<'K', char> command{ch};
+    response_t<char> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
-
-printf("%ld %ld %d\n", sizeof(command), sizeof(response), nbytes);
 
     if (nbytes != sizeof(response)) return false;
     if (!response.is_ok()) return false;
@@ -827,7 +771,7 @@ struct simulator_protocol : nexstar_protocol {
         return 9;
 
       case 'H':
-        if (reinterpret_cast<const set_utcdate_t*>(in)->parse(&utcdate)) {
+        if (reinterpret_cast<const utcdate_t*>(in+1)->parse(&utcdate)) {
           out[0] = '#';
           return 1;
           utcdate_updated = alpaca::utcdate_t::now();
@@ -841,7 +785,7 @@ struct simulator_protocol : nexstar_protocol {
         return 9;
 
       case 'W':
-        if (reinterpret_cast<const set_location_t*>(in)->parse(&latitude, &longitude)) {
+        if (reinterpret_cast<const location_t*>(in+1)->parse(&latitude, &longitude)) {
           out[0] = '#';
           return 1;
         } else {

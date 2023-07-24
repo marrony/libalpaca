@@ -374,9 +374,9 @@ struct nexstar_protocol {
     return response.parse(major, minor);
   }
 
-  bool get_model(std::int32_t* model) {
+  bool get_model(std::int8_t* model) {
     const command_t<'m', empty_t> command;
-    response_t<std::int32_t> response;
+    response_t<std::int8_t> response;
 
     int nbytes = send_command(command.data, sizeof(command), response.data, sizeof(response));
 
@@ -1034,7 +1034,7 @@ class celestron_telescope : public alpaca::telescope {
 
   // device
   virtual alpaca::deviceinfo_t get_deviceinfo() const {
-    int model = 0;
+    std::int8_t model = 0;
 
     check_op(protocol->get_model(&model));
 

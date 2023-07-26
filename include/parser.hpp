@@ -6,6 +6,7 @@
 #include <string>
 #include <cstdio>
 #include <stdexcept>
+#include <optional>
 #include <string_view>
 #include <util.hpp>
 
@@ -14,12 +15,12 @@ namespace parser {
 
 template<typename T>
 struct conversor {
-  static T conv(std::string_view);
+  auto conv(std::string_view) -> std::optional<T>;
 };
 
 template<>
 struct conversor<bool> {
-  static bool conv(std::string_view v) {
+  auto conv(std::string_view v) -> std::optional<bool> {
     if (util::equals_insentive(v, "true")) {
       return true;
     }
@@ -28,36 +29,40 @@ struct conversor<bool> {
       return false;
     }
 
-    throw std::invalid_argument(std::string(v));
+    return std::nullopt;
   }
 };
 
 template<>
 struct conversor<int> {
-  static int conv(std::string_view v) {
-    int value;
-    if (std::sscanf(v.data(), "%d", &value) == 1) {
-      return value;
-    }
-    throw std::invalid_argument(std::string(v));
+  auto conv(std::string_view v) -> std::optional<int> {
+    char* end = nullptr;
+    long value = std::strtol(v.data(), &end, 10);
+
+    if (v.data() != end)
+     return static_cast<int>(value);
+
+    return std::nullopt;
   }
 };
 
 template<>
 struct conversor<float> {
-  static float conv(std::string_view v) {
-    float value;
-    if (std::sscanf(v.data(), "%f", &value) == 1) {
+  auto conv(std::string_view v) -> std::optional<float> {
+    char* end = nullptr;
+    float value = std::strtof(v.data(), &end);
+
+    if (v.data() != end)
       return value;
-    }
-    throw std::invalid_argument(std::string(v));
+
+    return std::nullopt;
   }
 };
 
 template<>
-struct conversor<std::string> {
-  static std::string conv(std::string_view v) {
-    return std::string(v);
+struct conversor<std::string_view> {
+  auto conv(std::string_view v) -> std::optional<std::string_view> {
+    return v;
   }
 };
 
@@ -66,12 +71,12 @@ struct field {
   const char* name;
 
   T get(const arguments_t& args) const {
+    // todo(marrony): key is a std::string
     if (auto ite = args.find(name); ite != args.end()) {
-      try {
-        return conversor<T>().conv(ite->second);
-      } catch(...) {
-        throw std::invalid_argument(std::string("Invalid '") + name + "' field");
-      }
+      if (auto value = conversor<T>{}.conv(ite->second))
+        return *value;
+
+      throw std::invalid_argument(std::string("Invalid '") + name + "' field");
     } else {
       throw std::invalid_argument(std::string("Field '") + name + "' not found");
     }

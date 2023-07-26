@@ -9,8 +9,6 @@ namespace alpaca {
 
 namespace error {
 
-struct not_found { };
-
 struct alpaca_error {
   const int error_number;
   const std::string error_message;

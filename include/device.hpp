@@ -53,87 +53,71 @@ class device {
   virtual deviceinfo_t get_deviceinfo() const = 0;
 };
 
-// template<class T, class U>
-// concept Derived = std::is_base_of_v<U, T>;
-
 template<typename T>
+requires std::is_base_of_v<device, T>
 class device_resource : public alpaca_resource {
-  static_assert(std::is_base_of_v<device, T>, "T must be derived from device");
-
  protected:
   std::string device_type;
   std::vector<T*> devices;
 
-  using get_fn = std::function<json_value(const T*, const arguments_t&)>;
-  using put_fn = std::function<void(T*, const arguments_t&)>;
+  using get_fn = json_value(*)(const T*, const arguments_t&);
+  using put_fn = void(*)(T*, const arguments_t&);
 
-  std::map<std::string, get_fn> get_operations;
-  std::map<std::string, put_fn> put_operations;
+  std::map<std::string_view, get_fn> get_operations;
+  std::map<std::string_view, put_fn> put_operations;
 
-  void define_get(const char* op, get_fn get) {
+  inline void define_get(std::string_view op, get_fn get) {
     get_operations[op] = get;
   }
 
-  void define_put(const char* op, put_fn put) {
+  inline void define_put(std::string_view op, put_fn put) {
     put_operations[op] = put;
   }
 
-  void define_ops(const char* op, get_fn get, put_fn put) {
+  inline void define_ops(std::string_view op, get_fn get, put_fn put) {
     get_operations[op] = get;
     put_operations[op] = put;
   }
 
  protected:
-  virtual json_value handle_get(
+  virtual return_t handle_get(
     const httpserver::http_request& req,
     const arguments_t& args) {
 
     if (req.get_path_piece(2) != device_type) {
-      throw error::not_found();
+      return unexpected(http_error_kind::not_found);
     }
 
     int device_id = util::parse_int(req.get_path_piece(3), -1);
 
     if (device_id < 0 || static_cast<std::size_t>(device_id) > devices.size()) {
-      throw error::not_found();
+      return unexpected(http_error_kind::not_found);
     }
 
     T* device = devices[device_id];
 
     auto operation = req.get_path_piece(4);
 
-    auto op = get_operations.find(operation);
-    if (op != get_operations.end()) {
-      return op->second(device, args);
-    } else {
-      throw error::not_found();
-    }
-  }
-
-  virtual void handle_put(
-    const httpserver::http_request& req,
-    const arguments_t& args) {
-
-    if (req.get_path_piece(2) != device_type) {
-      throw error::not_found();
+    if (req.get_method() == "GET") {
+      auto op = get_operations.find(operation);
+      if (op != get_operations.end()) {
+        return op->second(device, args);
+      } else {
+        return unexpected(http_error_kind::not_found);
+      }
     }
 
-    int device_id = util::parse_int(req.get_path_piece(3), -1);
-
-    if (device_id < 0 || static_cast<std::size_t>(device_id) > devices.size()) {
-      throw error::not_found();
+    if (req.get_method() == "PUT") {
+      auto op = put_operations.find(operation);
+      if (op != put_operations.end()) {
+        op->second(device, args);
+        return nullptr;
+      } else {
+        return unexpected(http_error_kind::not_found);
+      }
     }
 
-    T* device = devices[device_id];
-
-    auto operation = req.get_path_piece(4);
-
-    auto op = put_operations.find(operation);
-    if (op != put_operations.end()) {
-      op->second(device, args);
-    } else {
-      throw error::not_found();
-    }
+    return unexpected(http_error_kind::bad_request);
   }
 
  public:
@@ -157,30 +141,30 @@ class device_resource : public alpaca_resource {
 
     define_ops(
       "connected",
-      [](const T* dev, const arguments_t& args) {
+      [](const T* dev, const arguments_t& args) -> json_value {
         return dev->get_connected();
       },
       [](T* dev, const arguments_t& args) {
         dev->put_connected(parser::parser_t::parse<bool>(args, fields::connected_f));
       });
 
-    define_get("description", [](const T* dev, const arguments_t& args) {
+    define_get("description", [](const T* dev, const arguments_t& args) -> json_value {
       return dev->get_description();
     });
-    define_get("driverinfo", [](const T* dev, const arguments_t& args) {
+    define_get("driverinfo", [](const T* dev, const arguments_t& args) -> json_value {
       return dev->get_driverinfo();
     });
-    define_get("driverversion", [](const T* dev, const arguments_t& args) {
+    define_get("driverversion", [](const T* dev, const arguments_t& args) -> json_value {
       return dev->get_driverversion();
     });
-    define_get("interfaceversion", [](const T* dev, const arguments_t& args) {
+    define_get("interfaceversion", [](const T* dev, const arguments_t& args) -> json_value {
       return dev->get_interfaceversion();
     });
-    define_get("name", [](const T* dev, const arguments_t& args) {
+    define_get("name", [](const T* dev, const arguments_t& args) -> json_value {
       return dev->get_name();
     });
 
-    define_get("supportedactions", [](const T* dev, const arguments_t&) {
+    define_get("supportedactions", [](const T* dev, const arguments_t&) -> json_value {
       auto supportedactions = dev->get_supportedactions();
       json_array actions;
       std::copy(

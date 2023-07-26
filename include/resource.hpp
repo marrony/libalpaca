@@ -9,6 +9,7 @@
 
 #include <httpserver.hpp>
 
+#include <c++util.hpp>
 #include <json.hpp>
 #include <util.hpp>
 #include <errors.hpp>
@@ -29,18 +30,22 @@ using arguments_t = std::map<
   comparator_t
 >;
 
+enum class http_error_kind {
+  not_found,
+  bad_request
+};
+
+using return_t = ret_t<
+  json_value,
+  http_error_kind
+>;
+
 class alpaca_resource : public httpserver::http_resource {
 
  protected:
-  virtual json_value handle_get(
+  virtual return_t handle_get(
     const httpserver::http_request& req,
-    const arguments_t& args) {
-    return nullptr;
-  }
-
-  virtual void handle_put(
-    const httpserver::http_request& req,
-    const arguments_t& args) { }
+    const arguments_t& args) = 0;
 
   std::shared_ptr<httpserver::http_response> not_found() {
     return std::make_shared<httpserver::string_response>("Not Found", 404);
@@ -111,29 +116,40 @@ class alpaca_resource : public httpserver::http_resource {
     };
 
     try {
-      if (req.get_method() == "GET") {
-        js_out["Value"] = handle_get(req, args);
-
+      auto handle_return = [&](return_t&& ret) {
         std::cout << req.get_method() << " " << req.get_path() << "?" << to_parse;
-        std::cout << " => " << js_out["Value"] << std::endl;
-      }
+        return std::visit(
+          overloaded {
+            [&](const json_value& value) {
+              if (value != nullptr)
+                std::cout << " => " << value << std::endl;
+              else
+                std::cout << std::endl;
 
-      if (req.get_method() == "PUT") {
-        std::cout << req.get_method() << " " << req.get_path() << "?" << to_parse << std::endl;
+              js_out["Value"] = value;
+              return ok(js_out);
+            },
+            [=](http_error_kind error) {
+              switch (error) {
+                case http_error_kind::not_found:
+                  return not_found();
+                case http_error_kind::bad_request:
+                  return bad_request("invalid method");
+              }
+            }
+          },
+          ret
+        );
+      };
 
-        handle_put(req, args);
-      }
-
-      return ok(js_out);
-    } catch (error::not_found& ex) {
-      return not_found();
+      return handle_return(handle_get(req, args));
     } catch (error::alpaca_error& ex) {
       js_out["ErrorNumber"] = ex.error_number;
       js_out["ErrorMessage"] = ex.error_message;
       return ok(js_out);
-    } catch (std::exception& ex) {
-      std::cout << ex.what() << std::endl;
-      return bad_request(ex.what());
+    } catch (...) {
+      std::cout << "unknown exception" << std::endl;
+      return bad_request("unknown exception");
     }
   }
 };

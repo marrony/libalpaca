@@ -29,6 +29,7 @@
 namespace alpaca {
 namespace util {
 
+[[nodiscard]]
 static inline std::string to_lower(std::string_view str) {
   std::string out(str.size(), '\0');
   std::transform(
@@ -39,14 +40,17 @@ static inline std::string to_lower(std::string_view str) {
   return out;
 }
 
+[[nodiscard]]
 static inline bool compare_less_insensitive(std::string_view a, std::string_view b) {
   COMPARATOR(a, b, LOWER);
 }
 
+[[nodiscard]]
 static inline bool compare_less_sensitive(std::string_view a, std::string_view b) {
   COMPARATOR(a, b, NO_OP);
 }
 
+[[nodiscard]]
 static inline bool equals_insentive(std::string_view x, std::string_view y) {
   size_t l1 = x.size();
   size_t l2 = y.size();
@@ -63,6 +67,7 @@ static inline bool equals_insentive(std::string_view x, std::string_view y) {
   return true;
 }
 
+[[nodiscard]]
 static inline std::vector<std::string_view> split(std::string_view str, std::string_view delim) {
   std::vector<std::string_view> tokens;
 
@@ -78,20 +83,12 @@ static inline std::vector<std::string_view> split(std::string_view str, std::str
   return tokens;
 }
 
+[[nodiscard]]
 static inline int parse_int(std::string_view str, int default_value) {
-  try {
-    return std::stoi(std::string(str));
-  } catch (...) {
-    return default_value;
-  }
-}
+  char* end = nullptr;
+  long value = std::strtol(str.data(), &end, 10);
 
-static inline long parse_long(std::string_view str, long default_value) {
-  try {
-    return std::stol(std::string(str));
-  } catch (...) {
-    return default_value;
-  }
+  return str.data() != end ? static_cast<int>(value) : default_value;
 }
 
 }  // namespace util

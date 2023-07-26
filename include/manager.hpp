@@ -23,7 +23,7 @@ class device_manager {
    public:
     apiversions_resource() { }
 
-    virtual json_value handle_get(
+    virtual return_t handle_get(
       const httpserver::http_request& req,
       const arguments_t& args) {
       json_array response = { 1 };
@@ -35,7 +35,7 @@ class device_manager {
    public:
     description_resource() { }
 
-    virtual json_value handle_get(
+    virtual return_t handle_get(
       const httpserver::http_request& req,
       const arguments_t& args) {
 
@@ -54,7 +54,7 @@ class device_manager {
     configureddevices_resource(device_manager* manager)
     : manager(manager) { }
 
-    virtual json_value handle_get(
+    virtual return_t handle_get(
       const httpserver::http_request& req,
       const arguments_t& args) {
       json_array response;

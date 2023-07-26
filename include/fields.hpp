@@ -41,7 +41,7 @@ constexpr const parser::field<int> slewsettletime_f = { "SlewSettleTime" };
 constexpr const parser::field<int> trackingrate_f = { "TrackingRate" };
 
 // string fields
-constexpr const parser::field<std::string> utcdate_f = { "UTCDate" };
+constexpr const parser::field<std::string_view> utcdate_f = { "UTCDate" };
 
 }  // namespace fields
 }  // namespace alpaca

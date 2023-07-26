@@ -1226,12 +1226,23 @@ class celestron_telescope : public alpaca::telescope {
     check_op(protocol->cancel_goto());
   }
 
+  virtual void findhome() { }
+
   virtual void moveaxis(int axis, float rate) {
     check_op(protocol->slew_variable(axis, rate));
   }
 
-  virtual void slewtoaltazasync(float altitude, float azimuth) {
-  }
+  virtual void park() { }
+
+  virtual void pulseguide(int direction, int duration) { }
+
+  virtual void setpark() { }
+
+  virtual void slewtoaltaz(float altitude, float azimuth) { }
+
+  virtual void slewtoaltazasync(float altitude, float azimuth) { }
+
+  virtual void slewtocoordinates(float rightascension, float declination) { }
 
   virtual void slewtocoordinatesasync(float rightascension, float declination) {
     targetrightascension = rightascension;
@@ -1239,12 +1250,13 @@ class celestron_telescope : public alpaca::telescope {
     check_op(protocol->goto_ra_de(rightascension, declination, false));
   }
 
+  virtual void slewtotarget() { }
+
   virtual void slewtotargetasync() {
     check_op(protocol->goto_ra_de(targetrightascension, targetdeclination, false));
   }
 
-  virtual void synctoaltaz(float altitude, float azimuth) {
-  }
+  virtual void synctoaltaz(float altitude, float azimuth) { }
 
   virtual void synctocoordinates(
     float rightascension, float declination) {
@@ -1257,6 +1269,8 @@ class celestron_telescope : public alpaca::telescope {
   virtual void synctotarget() {
     //protocol->goto_ra_de(target_ra, target_de);
   }
+
+  virtual void unpark() { }
 };
 
 }  // namespace celestron

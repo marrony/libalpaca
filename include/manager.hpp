@@ -27,7 +27,7 @@ class device_manager {
       const httpserver::http_request& req,
       const arguments_t& args) {
       json_array response = { 1 };
-      return response;
+      return static_cast<json_value>(response);
     }
   };
 
@@ -39,12 +39,14 @@ class device_manager {
       const httpserver::http_request& req,
       const arguments_t& args) {
 
-      return (json_object) {
-        {"ServerName", "Alpaca Telescope Server"},
-        {"Manufacturer", "Marrony Neris"},
-        {"ManufacturerVersion", "0.0.1"},
-        {"Location", "US"}
-      };
+      return static_cast<json_value>(
+        (json_object) {
+          {"ServerName", "Alpaca Telescope Server"},
+          {"Manufacturer", "Marrony Neris"},
+          {"ManufacturerVersion", "0.0.1"},
+          {"Location", "US"}
+        }
+      );
     }
   };
 
@@ -74,7 +76,7 @@ class device_manager {
           };
         });
 
-      return response;
+      return static_cast<json_value>(response);
     }
   };
 

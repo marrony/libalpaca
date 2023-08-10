@@ -57,7 +57,7 @@ struct utcdate_t {
     gmtime_r(&time, utc_tm);
   }
 
-  static utcdate_t parse_utc(std::string_view utc) {
+  static result<utcdate_t, std::string> parse_utc(std::string_view utc) {
     std::tm utc_tm;
     float seconds;
 
@@ -69,7 +69,7 @@ struct utcdate_t {
       &utc_tm.tm_min, &seconds);
 
     if (count != 6) {
-      throw alpaca::error::invalid_value();
+      return std::string{"invalid utc date"};
     }
 
     utc_tm.tm_year -= 1900;

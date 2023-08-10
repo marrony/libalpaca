@@ -30,20 +30,13 @@ using arguments_t = std::map<
   comparator_t
 >;
 
-enum class http_error_kind {
-  not_found,
-  bad_request
-};
-
-using return_t = ret_t<
-  json_value,
-  http_error_kind
->;
+using return_t = result<json_value, alpaca_error>;
+using return_void_t = result<void, alpaca_error>;
 
 class alpaca_resource : public httpserver::http_resource {
 
  protected:
-  virtual return_t handle_get(
+  virtual result<json_value, alpaca_error> handle_get(
     const httpserver::http_request& req,
     const arguments_t& args) = 0;
 
@@ -79,7 +72,9 @@ class alpaca_resource : public httpserver::http_resource {
     std::string_view to_parse =
       req.get_method() == "PUT"
       ? req.get_content()
-      : req.get_querystring().substr(1);
+      : req.get_querystring().size() > 0
+      ? req.get_querystring().substr(1)
+      : "";
 
     for (auto& token : util::split(to_parse, "&")) {
       auto a = util::split(token, "=");
@@ -107,46 +102,43 @@ class alpaca_resource : public httpserver::http_resource {
 
     static std::atomic<int> server_transaction_id;
 
-    json_object js_out = {
-      {"ClientID", static_cast<json_int>(client_id)},
-      {"ErrorNumber", 0},
-      {"ErrorMessage", std::string("")},
-      {"ClientTransactionID", static_cast<json_int>(client_transaction_id)},
-      {"ServerTransactionID", ++server_transaction_id}
+    auto create_output = [&](const json_value& value, int error_number = 0, const std::string& error_message = "") -> json_object {
+      return {
+        {"Value", value},
+        {"ClientID", static_cast<json_int>(client_id)},
+        {"ErrorNumber", error_number},
+        {"ErrorMessage", error_message},
+        {"ClientTransactionID", static_cast<json_int>(client_transaction_id)},
+        {"ServerTransactionID", ++server_transaction_id}
+      };
     };
 
     try {
       auto handle_return = [&](return_t&& ret) {
         std::cout << req.get_method() << " " << req.get_path() << "?" << to_parse;
-        return std::visit(
-          overloaded {
-            [&](const json_value& value) {
-              if (value != nullptr)
-                std::cout << " => " << value << std::endl;
-              else
-                std::cout << std::endl;
 
-              js_out["Value"] = value;
-              return ok(js_out);
-            },
-            [=](http_error_kind error) {
-              switch (error) {
-                case http_error_kind::not_found:
-                  return not_found();
-                case http_error_kind::bad_request:
-                  return bad_request("invalid method");
-              }
-            }
+        return ret.match(
+          [&](const json_value& value) {
+            if (value != nullptr)
+              std::cout << " => " << value << std::endl;
+            else
+              std::cout << std::endl;
+
+            return ok(create_output(value, 0, ""));
           },
-          ret
+          [&](const alpaca_error& error) {
+            return ok(create_output(
+              static_cast<json_value>(nullptr),
+              error.error_number,
+              error.error_message));
+          }
         );
       };
 
       return handle_return(handle_get(req, args));
-    } catch (error::alpaca_error& ex) {
-      js_out["ErrorNumber"] = ex.error_number;
-      js_out["ErrorMessage"] = ex.error_message;
-      return ok(js_out);
+    } catch (std::exception& ex) {
+      std::cout << ex.what() << std::endl;
+      return bad_request(ex.what());
     } catch (...) {
       std::cout << "unknown exception" << std::endl;
       return bad_request("unknown exception");

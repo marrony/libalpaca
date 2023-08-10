@@ -27,7 +27,6 @@ using json_bool = bool;
 using json_string = std::string;
 using json_array = std::vector<json_value>;
 using json_object = std::map<std::string, json_value>;
-using json_null_t = std::nullopt_t;
 
 }  // namespace alpaca
 

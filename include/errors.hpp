@@ -7,8 +7,6 @@
 
 namespace alpaca {
 
-namespace error {
-
 struct alpaca_error {
   const int error_number;
   const std::string error_message;
@@ -41,10 +39,8 @@ struct value_not_set : alpaca_error {
 
 // reserved error code (0x407) used to indicate that the communications
 // channel is not connected.
-struct not_connected : alpaca_error {
-  not_connected()
-  : alpaca_error(0x0407, "Not connected")
-  { }
+auto not_connected() {
+  return alpaca_error(0x0407, "Not connected");
 };
 
 // reserved error code (0x408) used to indicate that the attempted operation
@@ -79,9 +75,12 @@ struct action_not_implemented : alpaca_error {
   { }
 };
 
+auto custom_error(const std::string& str) {
+  return alpaca_error(0x500, str);
+}
+
 // [0x500 - 0xfff] reserved for driver specific errors.
 
-}  // namespace error
 }  // namespace alpaca
 
 #endif  // INCLUDE_ERRORS_HPP_

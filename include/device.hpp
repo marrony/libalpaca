@@ -42,10 +42,12 @@ class device {
   }
 
   [[nodiscard]]
-  inline auto check_flag(bool flag) const -> check_t {
-    if (!flag) return not_implemented();
+  inline auto check_flag(const return_t<bool>& flag) const -> check_t {
+    return flag.flat_map([](bool flag) -> check_t {
+      if (!flag) return not_implemented();
 
-    return {};
+      return {};
+    });
   }
 
   [[nodiscard]]
@@ -84,40 +86,40 @@ class device {
     this->device_number = device_number;
   }
 
-  virtual return0_t<void> put_connected(bool connected) {
+  virtual return_t<void> put_connected(bool connected) {
     if (is_connected && connected) return {};
     if (!is_connected && !connected) return {};
     is_connected = connected;
     return {};
   }
 
-  virtual return0_t<bool> get_connected() const {
+  virtual return_t<bool> get_connected() const {
     return is_connected;
   }
 
-  virtual return0_t<void> put_action() {
+  virtual return_t<void> put_action() {
     return {};
   }
 
-  virtual return0_t<void> put_commandblind() {
+  virtual return_t<void> put_commandblind() {
     return {};
   }
 
-  virtual return0_t<void> put_commandbool() {
+  virtual return_t<void> put_commandbool() {
     return {};
   }
 
-  virtual return0_t<void> put_commandstring() {
+  virtual return_t<void> put_commandstring() {
     return {};
   }
 
-  virtual return0_t<std::string> get_description() const = 0;
-  virtual return0_t<std::string> get_driverinfo() const = 0;
-  virtual return0_t<std::string> get_driverversion() const = 0;
-  virtual return0_t<int> get_interfaceversion() const = 0;
-  virtual return0_t<std::string> get_name() const = 0;
-  virtual return0_t<std::vector<std::string>> get_supportedactions() const = 0;
-  virtual return0_t<deviceinfo_t> get_deviceinfo() const = 0;
+  virtual return_t<std::string> get_description() const = 0;
+  virtual return_t<std::string> get_driverinfo() const = 0;
+  virtual return_t<std::string> get_driverversion() const = 0;
+  virtual return_t<int> get_interfaceversion() const = 0;
+  virtual return_t<std::string> get_name() const = 0;
+  virtual return_t<std::vector<std::string>> get_supportedactions() const = 0;
+  virtual return_t<deviceinfo_t> get_deviceinfo() const = 0;
 };
 
 template<typename T>
@@ -127,15 +129,14 @@ class device_resource : public alpaca_resource {
   std::string device_type;
   std::vector<T*> devices;
 
-  using get_fn = return_t(*)(const T*, const arguments_t&);
-  using put_fn = return_void_t(*)(T*, const arguments_t&);
+  using get_fn = std::function<return_t<json_value>(const T*, const arguments_t&)>;
+  using put_fn = return_t<void>(*)(T*, const arguments_t&);
 
   std::map<std::string_view, get_fn> get_operations;
   std::map<std::string_view, put_fn> put_operations;
 
   inline void define_get(std::string_view op, get_fn get) {
-    get_operations[op] = get;
-  }
+    get_operations[op] = get;  }
 
   inline void define_put(std::string_view op, put_fn put) {
     put_operations[op] = put;
@@ -147,7 +148,7 @@ class device_resource : public alpaca_resource {
   }
 
  protected:
-  virtual return_t handle_get(
+  virtual return_t<json_value> handle_get(
     const httpserver::http_request& req,
     const arguments_t& args) {
 
@@ -191,55 +192,51 @@ class device_resource : public alpaca_resource {
  public:
   device_resource(const std::string& device_type)
   : device_type(device_type), devices() {
-    define_put("action", [](T* device, const arguments_t& args) -> return_void_t {
-      device->put_action();
-      return return_void_t{};
+    define_put("action", [](T* device, const arguments_t& args) {
+      return device->put_action();
     });
 
-    define_put("commandblind", [](T* device, const arguments_t& args) -> return_void_t {
-      device->put_commandblind();
-      return return_void_t{};
+    define_put("commandblind", [](T* device, const arguments_t& args) {
+      return device->put_commandblind();
     });
 
-    define_put("commandbool", [](T* device, const arguments_t& args) -> return_void_t {
-      device->put_commandbool();
-      return return_void_t{};
+    define_put("commandbool", [](T* device, const arguments_t& args) {
+      return device->put_commandbool();
     });
 
-    define_put("commandstring", [](T* device, const arguments_t& args) -> return_void_t {
-      device->put_commandstring();
-      return return_void_t{};
+    define_put("commandstring", [](T* device, const arguments_t& args) {
+      return device->put_commandstring();
     });
 
     define_ops(
       "connected",
-      [](const T* dev, const arguments_t& args) -> return_t {
+      [](const T* dev, const arguments_t& args) -> return_t<json_value> {
         return dev->get_connected();
       },
-      [](T* dev, const arguments_t& args) -> return_void_t {
+      [](T* dev, const arguments_t& args) {
         return parser::parser_t::parse<bool>(args, fields::connected_f)
           .map([dev](bool connected) {
             dev->put_connected(connected);
           });
       });
 
-    define_get("description", [](const T* dev, const arguments_t& args) -> return_t {
+    define_get("description", [](const T* dev, const arguments_t& args) -> return_t<json_value> {
       return dev->get_description();
     });
-    define_get("driverinfo", [](const T* dev, const arguments_t& args) -> return_t {
+    define_get("driverinfo", [](const T* dev, const arguments_t& args) -> return_t<json_value> {
       return dev->get_driverinfo();
     });
-    define_get("driverversion", [](const T* dev, const arguments_t& args) -> return_t {
+    define_get("driverversion", [](const T* dev, const arguments_t& args) -> return_t<json_value> {
       return dev->get_driverversion();
     });
-    define_get("interfaceversion", [](const T* dev, const arguments_t& args) -> return_t {
+    define_get("interfaceversion", [](const T* dev, const arguments_t& args) -> return_t<json_value> {
       return dev->get_interfaceversion();
     });
-    define_get("name", [](const T* dev, const arguments_t& args) -> return_t {
+    define_get("name", [](const T* dev, const arguments_t& args) -> return_t<json_value> {
       return dev->get_name();
     });
 
-    define_get("supportedactions", [](const T* dev, const arguments_t&) -> return_t {
+    define_get("supportedactions", [](const T* dev, const arguments_t&) -> return_t<json_value> {
       json_array actions;
       /*auto supportedactions = dev->get_supportedactions();
       std::copy(

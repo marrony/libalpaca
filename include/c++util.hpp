@@ -120,9 +120,9 @@ namespace __detail {
   template<typename V, typename Tp, typename Err>
   constexpr auto move_result(result<V, Err>&& v) -> std::variant<Tp, Err> {
     if (!v.is_error())
-      return std::get<V>(v.value);
+      return std::get<V>(v._value);
     else {
-      return std::get<Err>(v.value);
+      return std::get<Err>(v._value);
     }
   }
 }
@@ -131,7 +131,7 @@ template<typename Tp, typename Err>
 class result {
   using type = std::variant<Tp, Err>;
 
-  type value;
+  type _value;
 
   template<typename, typename>
   friend class result;
@@ -139,59 +139,41 @@ class result {
   template<typename V, typename Tp1, typename Err1>
   friend constexpr auto __detail::move_result(result<V, Err1>&& v) -> std::variant<Tp1, Err1>;
 public:
-   constexpr result(type&& v) noexcept
-  : value{std::move(v)}
-  { }
-
   constexpr result(result&& v) noexcept
-  : value{std::move(v.value)}
+  : _value{std::move(v._value)}
   { }
 
   constexpr result(const result& v) noexcept
-  : value{v.value}
+  : _value{v._value}
   { }
 
   template<typename V>
   requires std::convertible_to<V, Tp>
   constexpr result(result<V, Err>&& v) noexcept
-  : value{__detail::move_result<V, Tp, Err>(std::forward<result<V, Err>>(v))}
+  : _value{__detail::move_result<V, Tp, Err>(std::forward<result<V, Err>>(v))}
   { }
 
   template<typename V>
   requires std::convertible_to<V, Tp> || std::convertible_to<V, Err>
   constexpr result(V&& v) noexcept
-  : value{std::move(v)}
+  : _value{std::move(v)}
   { }
-
-#if 0
-  template<typename V>
-  requires (std::disjunction_v<std::is_same<V, Tp>, std::is_same<V, Err>>)
-  constexpr result(V&& v) noexcept
-  : value{std::forward<V>(v)}
-  { }
-
-  template<typename V>
-  requires (std::disjunction_v<std::is_same<V, Tp>, std::is_same<V, Err>>)
-  constexpr result(const V& v) noexcept
-  : value{v}
-  { }
-#endif
 
   template<typename... Fn>
-  constexpr auto match(Fn&& ...fn) {
-    return std::visit(overloaded{fn...}, value);
+  constexpr auto match(Fn&& ...fn) const {
+    return std::visit(overloaded{fn...}, _value);
   }
 
   template<typename Fn>
-  constexpr auto map(Fn&& fn) {
+  constexpr auto map(Fn&& fn) const {
     using U = decltype(fn(std::declval<Tp>()));
     using Ret = result<U, Err>;
 
-    if (value.index() == 0) {
+    if (_value.index() == 0) {
       if constexpr (std::is_void_v<U>) {
         std::invoke(
           std::forward<Fn>(fn),
-          std::forward<Tp>(std::get<Tp>(value))
+          std::get<Tp>(_value)
         );
 
         return Ret{};
@@ -199,66 +181,66 @@ public:
         return Ret{
           std::invoke(
             std::forward<Fn>(fn),
-            std::forward<Tp>(std::get<Tp>(value))
+            std::get<Tp>(_value)
           )
         };
       }
     } else {
-      return Ret{std::get<Err>(value)};
+      return Ret{std::get<Err>(_value)};
     }
   }
 
   template<typename Fn>
-  constexpr auto flat_map(Fn&& fn) -> decltype(fn(std::declval<Tp>())) {
+  constexpr auto flat_map(Fn&& fn) const -> decltype(fn(std::declval<Tp>())) {
     using Ret = decltype(fn(std::declval<Tp>()));
 
     static_assert(__detail::is_result_v<Ret>, "callable must return a result<Tp, Err>");
     static_assert(std::is_same_v<Err, __detail::error_t<Ret>>, "error types must match");
 
-    if (value.index() == 0) {
+    if (_value.index() == 0) {
       return std::invoke(
         std::forward<Fn>(fn),
-        std::forward<Tp>(std::get<Tp>(value))
+        std::get<Tp>(_value)
       );
     } else {
-      return Ret{std::get<Err>(value)};
+      return Ret{std::get<Err>(_value)};
     }
   }
 
   constexpr Tp& get() & {
-    return std::get<0>(value);
+    return std::get<0>(_value);
   }
 
   constexpr const Tp& get() const & {
-    return std::get<0>(value);
+    return std::get<0>(_value);
   }
 
   constexpr Tp&& get() && {
-    return std::move(std::get<0>(value));
+    return std::move(std::get<0>(_value));
   }
 
   constexpr const Tp&& get() const && {
-    return std::move(std::get<0>(value));
+    return std::move(std::get<0>(_value));
   }
 
   constexpr Err& error() & {
-    return std::get<1>(value);
+    return std::get<1>(_value);
   }
 
   constexpr const Err& error() const & {
-    return std::get<1>(value);
+    return std::get<1>(_value);
   }
 
   constexpr Err&& error() && {
-    return std::move(std::get<1>(value));
+    return std::move(std::get<1>(_value));
   }
 
   constexpr const Err&& error() const && {
-    return std::move(std::get<1>(value));
+    return std::move(std::get<1>(_value));
   }
 
   constexpr auto is_error() const {
-    return value.index() > 0;
+    return _value.index() > 0;
   }
 };
 
@@ -266,12 +248,6 @@ template<typename Err>
 class result<void, Err> {
   std::optional<Err> _error;
 public:
-#if 0
-   constexpr result(type&& v) noexcept
-  : value{std::move(v)}
-  { }
-#endif
-
   constexpr result(result&& v) noexcept
   : _error{std::move(v._error)}
   { }
@@ -293,7 +269,7 @@ public:
   { }
 
   template<typename... Fn>
-  constexpr auto match(Fn&& ...fn) {
+  constexpr auto match(Fn&& ...fn) const {
     auto ov = overloaded{fn...};
 
     if (_error)
@@ -303,7 +279,7 @@ public:
   }
 
   template<typename Fn>
-  constexpr auto map(Fn&& fn) {
+  constexpr auto map(Fn&& fn) const {
     using U = decltype(fn());
     using Ret = result<U, Err>;
 
@@ -322,7 +298,7 @@ public:
   }
 
   template<typename Fn>
-  constexpr auto flat_map(Fn&& fn) -> decltype(fn()) {
+  constexpr auto flat_map(Fn&& fn) const -> decltype(fn()) {
     using Ret = decltype(fn());
 
     static_assert(__detail::is_result_v<Ret>, "callable must return a result<Tp, Err>");
@@ -335,8 +311,7 @@ public:
     }
   }
 
-  constexpr void get() {
-  }
+  constexpr void get() const { }
 
   constexpr Err& error() & {
     return *_error;

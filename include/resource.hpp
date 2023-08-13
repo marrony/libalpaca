@@ -31,10 +31,7 @@ using arguments_t = std::map<
 >;
 
 template<typename T>
-using return0_t = result<T, alpaca_error>;
-
-using return_t = return0_t<json_value>;
-using return_void_t = return0_t<void>;
+using return_t = result<T, alpaca_error>;
 
 class alpaca_resource : public httpserver::http_resource {
 
@@ -117,7 +114,7 @@ class alpaca_resource : public httpserver::http_resource {
     };
 
     {
-      auto handle_return = [&](return_t&& ret) {
+      auto handle_return = [&](return_t<json_value>&& ret) {
         std::cout << req.get_method() << " " << req.get_path() << "?" << to_parse;
 
         return ret.match(

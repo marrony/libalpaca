@@ -36,37 +36,42 @@ class device {
 
   [[nodiscard]]
   inline auto check_connected() const -> check_t {
-    if (!is_connected) throw not_connected();
+    if (!is_connected) return not_connected();
 
     return {};
   }
 
+  [[nodiscard]]
   inline auto check_flag(bool flag) const -> check_t {
-    if (!flag) throw not_implemented();
+    if (!flag) return not_implemented();
 
     return {};
   }
 
+  [[nodiscard]]
   inline auto check_op(bool completed) const -> check_t {
-    if (!completed) throw invalid_operation();
+    if (!completed) return invalid_operation();
 
     return {};
   }
 
+  [[nodiscard]]
   inline auto check_init(bool initialized) const -> check_t {
-    if (!initialized) throw value_not_set();
+    if (!initialized) return value_not_set();
 
     return {};
   }
 
+  [[nodiscard]]
   inline auto check_value(bool correct) const -> check_t {
-    if (!correct) throw invalid_value();
+    if (!correct) return invalid_value();
 
     return {};
   }
 
+  [[nodiscard]]
   inline auto check_set(bool set) const -> check_t {
-    if (!set) throw value_not_set();
+    if (!set) return value_not_set();
 
     return {};
   }
@@ -79,27 +84,40 @@ class device {
     this->device_number = device_number;
   }
 
-  virtual void put_connected(bool connected) {
-    if (is_connected && connected) return;
-    if (!is_connected && !connected) return;
+  virtual return0_t<void> put_connected(bool connected) {
+    if (is_connected && connected) return {};
+    if (!is_connected && !connected) return {};
     is_connected = connected;
+    return {};
   }
 
-  virtual bool get_connected() const {
+  virtual return0_t<bool> get_connected() const {
     return is_connected;
   }
 
-  virtual void put_action() {}
-  virtual void put_commandblind() {}
-  virtual void put_commandbool() {}
-  virtual void put_commandstring() {}
-  virtual std::string get_description() const = 0;
-  virtual std::string get_driverinfo() const = 0;
-  virtual std::string get_driverversion() const = 0;
-  virtual int get_interfaceversion() const = 0;
-  virtual std::string get_name() const = 0;
-  virtual const std::vector<std::string> get_supportedactions() const = 0;
-  virtual deviceinfo_t get_deviceinfo() const = 0;
+  virtual return0_t<void> put_action() {
+    return {};
+  }
+
+  virtual return0_t<void> put_commandblind() {
+    return {};
+  }
+
+  virtual return0_t<void> put_commandbool() {
+    return {};
+  }
+
+  virtual return0_t<void> put_commandstring() {
+    return {};
+  }
+
+  virtual return0_t<std::string> get_description() const = 0;
+  virtual return0_t<std::string> get_driverinfo() const = 0;
+  virtual return0_t<std::string> get_driverversion() const = 0;
+  virtual return0_t<int> get_interfaceversion() const = 0;
+  virtual return0_t<std::string> get_name() const = 0;
+  virtual return0_t<std::vector<std::string>> get_supportedactions() const = 0;
+  virtual return0_t<deviceinfo_t> get_deviceinfo() const = 0;
 };
 
 template<typename T>
@@ -196,7 +214,7 @@ class device_resource : public alpaca_resource {
     define_ops(
       "connected",
       [](const T* dev, const arguments_t& args) -> return_t {
-        return static_cast<json_value>(dev->get_connected());
+        return dev->get_connected();
       },
       [](T* dev, const arguments_t& args) -> return_void_t {
         return parser::parser_t::parse<bool>(args, fields::connected_f)
@@ -206,29 +224,29 @@ class device_resource : public alpaca_resource {
       });
 
     define_get("description", [](const T* dev, const arguments_t& args) -> return_t {
-      return static_cast<json_value>(dev->get_description());
+      return dev->get_description();
     });
     define_get("driverinfo", [](const T* dev, const arguments_t& args) -> return_t {
-      return static_cast<json_value>(dev->get_driverinfo());
+      return dev->get_driverinfo();
     });
     define_get("driverversion", [](const T* dev, const arguments_t& args) -> return_t {
-      return static_cast<json_value>(dev->get_driverversion());
+      return dev->get_driverversion();
     });
     define_get("interfaceversion", [](const T* dev, const arguments_t& args) -> return_t {
-      return static_cast<json_value>(dev->get_interfaceversion());
+      return dev->get_interfaceversion();
     });
     define_get("name", [](const T* dev, const arguments_t& args) -> return_t {
-      return static_cast<json_value>(dev->get_name());
+      return dev->get_name();
     });
 
     define_get("supportedactions", [](const T* dev, const arguments_t&) -> return_t {
-      auto supportedactions = dev->get_supportedactions();
       json_array actions;
+      /*auto supportedactions = dev->get_supportedactions();
       std::copy(
         std::cbegin(supportedactions),
         std::cend(supportedactions),
         std::begin(actions)
-      );
+      );*/
       return static_cast<json_value>(actions);
     });
   }

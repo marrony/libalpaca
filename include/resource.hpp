@@ -30,8 +30,11 @@ using arguments_t = std::map<
   comparator_t
 >;
 
-using return_t = result<json_value, alpaca_error>;
-using return_void_t = result<void, alpaca_error>;
+template<typename T>
+using return0_t = result<T, alpaca_error>;
+
+using return_t = return0_t<json_value>;
+using return_void_t = return0_t<void>;
 
 class alpaca_resource : public httpserver::http_resource {
 
@@ -113,7 +116,7 @@ class alpaca_resource : public httpserver::http_resource {
       };
     };
 
-    try {
+    {
       auto handle_return = [&](return_t&& ret) {
         std::cout << req.get_method() << " " << req.get_path() << "?" << to_parse;
 
@@ -136,12 +139,6 @@ class alpaca_resource : public httpserver::http_resource {
       };
 
       return handle_return(handle_get(req, args));
-    } catch (std::exception& ex) {
-      std::cout << ex.what() << std::endl;
-      return bad_request(ex.what());
-    } catch (...) {
-      std::cout << "unknown exception" << std::endl;
-      return bad_request("unknown exception");
     }
   }
 };

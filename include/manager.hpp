@@ -61,7 +61,9 @@ class device_manager {
       const arguments_t& args) {
       json_array response;
 
-      std::transform(
+      (void)manager;
+
+      /*std::transform(
         std::cbegin(manager->devices),
         std::cend(manager->devices),
         std::back_inserter(response),
@@ -74,7 +76,7 @@ class device_manager {
             {"DeviceNumber", info.device_number},
             {"UniqueID", info.unique_id},
           };
-        });
+        });*/
 
       return static_cast<json_value>(response);
     }

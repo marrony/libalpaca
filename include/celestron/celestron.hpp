@@ -1063,214 +1063,257 @@ class celestron_telescope : public alpaca::telescope {
   { }
 
   // device
-  virtual alpaca::deviceinfo_t get_deviceinfo() const {
+  virtual alpaca::return0_t<alpaca::deviceinfo_t> get_deviceinfo() const {
     int model = 0;
 
-    check_op(protocol->get_model(&model));
-
-    return {
-      .name = protocol->get_model_string(model),
-      .device_type = "telescope",
-      .device_number = device_number,
-      .unique_id = "fb9472c8-6217-4140-9ebe-67d9ca0754c1"
-    };
+    return check_op(protocol->get_model(&model))
+      .map([=]() -> alpaca::deviceinfo_t {
+        return {
+          .name = protocol->get_model_string(model),
+          .device_type = "telescope",
+          .device_number = device_number,
+          .unique_id = "fb9472c8-6217-4140-9ebe-67d9ca0754c1"
+        };
+      });
   }
 
   // telescope
 
   // read-only properties
-  virtual float get_altitude() const {
+  virtual alpaca::return0_t<float> get_altitude() const {
     float azm, alt;
 
-    check_op(protocol->get_azm_alt(&azm, &alt, false));
-
-    return alt;
+    return check_op(protocol->get_azm_alt(&azm, &alt, false))
+      .map([=]() {
+        return alt;
+      });
   }
 
-  virtual float get_azimuth() const {
+  virtual alpaca::return0_t<float> get_azimuth() const {
     float azm, alt;
 
-    check_op(protocol->get_azm_alt(&azm, &alt, false));
-
-    return azm;
+    return check_op(protocol->get_azm_alt(&azm, &alt, false))
+      .map([=]() {
+        return azm;
+      });
   }
 
-  virtual float get_declination() const {
+  virtual alpaca::return0_t<float> get_declination() const {
     float ra, de;
 
-    check_op(protocol->get_ra_de(&ra, &de, false));
-
-    return de;
+    return check_op(protocol->get_ra_de(&ra, &de, false))
+      .map([=]() {
+        return de;
+      });
   }
 
-  virtual float get_rightascension() const {
+  virtual alpaca::return0_t<float> get_rightascension() const {
     float ra, de;
 
-    check_op(protocol->get_ra_de(&ra, &de, false));
-
-    return ra;
+    return check_op(protocol->get_ra_de(&ra, &de, false))
+      .map([=]() {
+         return ra;
+      });
   }
 
-  virtual bool get_athome() const {
+  virtual alpaca::return0_t<bool> get_athome() const {
     return false;
   }
 
-  virtual bool get_atpark() const {
+  virtual alpaca::return0_t<bool> get_atpark() const {
     return false;
   }
 
-  virtual bool get_ispulseguiding() const {
+  virtual alpaca::return0_t<bool> get_ispulseguiding() const {
     return false;
   }
-  virtual bool get_slewing() const {
+
+  virtual alpaca::return0_t<bool> get_slewing() const {
     bool is_slewing;
-    check_op(protocol->is_goto_in_progress(&is_slewing));
-
-    return is_slewing;
+    return check_op(protocol->is_goto_in_progress(&is_slewing))
+      .map([=]() {
+        return is_slewing;
+      });
   }
 
-  virtual float get_siderealtime() const {
+  virtual alpaca::return0_t<float> get_siderealtime() const {
     float latitude, longitude;
 
-    check_op(protocol->get_location(&latitude, &longitude));
-
-    return alpaca::astronomy::to_lst(alpaca::utcdate_t::now(), longitude) / 15.0f;
+    return check_op(protocol->get_location(&latitude, &longitude))
+      .map([=]() {
+        return alpaca::astronomy::to_lst(alpaca::utcdate_t::now(), longitude) / 15.0f;
+      });
   }
 
-  virtual alpaca::destination_side_of_pier_t get_destinationsideofpier(
+  virtual alpaca::return0_t<alpaca::destination_side_of_pier_t> get_destinationsideofpier(
     float rightascension, float declination) const {
     return alpaca::destination_side_of_pier_t::pier_unknown;
   }
 
   // read-wrie properties
-  virtual float get_sitelatitude() const {
+  virtual alpaca::return0_t<float> get_sitelatitude() const {
     float latitude, longitude;
 
-    check_op(protocol->get_location(&latitude, &longitude));
-
-    return latitude;
+    return check_op(protocol->get_location(&latitude, &longitude))
+      .map([=]() {
+        return latitude;
+      });
   }
 
-  virtual void put_sitelatitude(float angle) {
+  virtual alpaca::return0_t<void> put_sitelatitude(float angle) {
     float latitude, longitude;
 
-    check_op(protocol->get_location(&latitude, &longitude));
-    check_op(protocol->set_location(angle, longitude));
+    return check_op(protocol->get_location(&latitude, &longitude))
+      .flat_map([=]() {
+        return check_op(protocol->set_location(angle, longitude));
+      });
   }
 
-  virtual float get_sitelongitude() const {
+  virtual alpaca::return0_t<float> get_sitelongitude() const {
     float latitude, longitude;
 
-    check_op(protocol->get_location(&latitude, &longitude));
-
-    return longitude;
+    return check_op(protocol->get_location(&latitude, &longitude))
+      .map([=]() {
+        return longitude;
+      });
   }
 
-  virtual void put_sitelongitude(float angle) {
+  virtual alpaca::return0_t<void> put_sitelongitude(float angle) {
     float latitude, longitude;
 
-    check_op(protocol->get_location(&latitude, &longitude));
-    check_op(protocol->set_location(latitude, angle));
+    return check_op(protocol->get_location(&latitude, &longitude))
+      .flat_map([=]() {
+        return check_op(protocol->set_location(latitude, angle));
+      });
   }
 
   float targetdeclination = 100;
   float targetrightascension = 100;
-  virtual float get_targetdeclination() const {
-    check_set(targetdeclination < 100);
-    return targetdeclination;
+  virtual alpaca::return0_t<float> get_targetdeclination() const {
+    return check_set(targetdeclination < 100)
+      .map([=]() {
+        return targetdeclination;
+      });
   }
 
-  virtual void put_targetdeclination(float targetdeclination) {
+  virtual alpaca::return0_t<void> put_targetdeclination(float targetdeclination) {
     this->targetdeclination = targetdeclination;
+    return {};
   }
 
-  virtual float get_targetrightascension() const {
-    check_set(targetrightascension < 100);
-    return targetrightascension;
+  virtual alpaca::return0_t<float> get_targetrightascension() const {
+    return check_set(targetrightascension < 100)
+      .map([=]() {
+        return targetrightascension;
+      });
   }
 
-  virtual void put_targetrightascension(float targetrightascension) {
+  virtual alpaca::return0_t<void> put_targetrightascension(float targetrightascension) {
     this->targetrightascension = targetrightascension;
+    return {};
   }
 
-  virtual bool get_tracking() const {
+  virtual alpaca::return0_t<bool> get_tracking() const {
     tracking_mode_kind mode;
-    check_op(protocol->get_tracking_mode(&mode));
-
-    return mode != tracking_mode_kind::off;
+    return check_op(protocol->get_tracking_mode(&mode))
+      .map([=]() {
+        return mode != tracking_mode_kind::off;
+      });
   }
 
-  virtual void put_tracking(bool tracking) {
+  virtual alpaca::return0_t<void> put_tracking(bool tracking) {
     tracking_mode_kind mode = tracking ? tracking_mode_kind::eq_north : tracking_mode_kind::off;
 
-    check_op(protocol->set_tracking_mode(mode));
+    return check_op(protocol->set_tracking_mode(mode));
   }
 
-  virtual alpaca::driver_rate_t get_trackingrate() const {
+  virtual alpaca::return0_t<alpaca::driver_rate_t> get_trackingrate() const {
     return alpaca::driver_rate_t::sidereal;
   }
 
-  virtual void put_trackingrate(alpaca::driver_rate_t) {
+  virtual alpaca::return0_t<void> put_trackingrate(alpaca::driver_rate_t) {
+    return {};
   }
 
-  virtual void get_utctm(alpaca::utcdate_t* utcdate) const {
-    check_op(protocol->get_utcdate(utcdate));
+  virtual alpaca::return0_t<void> get_utctm(alpaca::utcdate_t* utcdate) const {
+    return check_op(protocol->get_utcdate(utcdate));
   }
 
-  virtual void put_utctm(alpaca::utcdate_t utcdate) {
-    check_op(protocol->set_utcdate(utcdate));
+  virtual alpaca::return0_t<void> put_utctm(alpaca::utcdate_t utcdate) {
+    return check_op(protocol->set_utcdate(utcdate));
   }
 
   // operations
-  virtual void abortslew() {
-    check_op(protocol->cancel_goto());
+  virtual alpaca::return0_t<void> abortslew() {
+    return check_op(protocol->cancel_goto());
   }
 
-  virtual void findhome() { }
-
-  virtual void moveaxis(int axis, float rate) {
-    check_op(protocol->slew_variable(axis, rate));
+  virtual alpaca::return0_t<void> findhome() {
+    return {};
   }
 
-  virtual void park() { }
+  virtual alpaca::return0_t<void> moveaxis(int axis, float rate) {
+    return check_op(protocol->slew_variable(axis, rate));
+  }
 
-  virtual void pulseguide(int direction, int duration) { }
+  virtual alpaca::return0_t<void> park() {
+    return {};
+  }
 
-  virtual void setpark() { }
+  virtual alpaca::return0_t<void> pulseguide(int direction, int duration) {
+    return {};
+  }
 
-  virtual void slewtoaltaz(float altitude, float azimuth) { }
+  virtual alpaca::return0_t<void> setpark() {
+    return {};
+  }
 
-  virtual void slewtoaltazasync(float altitude, float azimuth) { }
+  virtual alpaca::return0_t<void> slewtoaltaz(float altitude, float azimuth) {
+    return {};
+  }
 
-  virtual void slewtocoordinates(float rightascension, float declination) { }
+  virtual alpaca::return0_t<void> slewtoaltazasync(float altitude, float azimuth) {
+    return {};
+  }
 
-  virtual void slewtocoordinatesasync(float rightascension, float declination) {
+  virtual alpaca::return0_t<void> slewtocoordinates(float rightascension, float declination) {
+    return {};
+  }
+
+  virtual alpaca::return0_t<void> slewtocoordinatesasync(float rightascension, float declination) {
     targetrightascension = rightascension;
     targetdeclination = declination;
-    check_op(protocol->goto_ra_de(rightascension, declination, false));
+    return check_op(protocol->goto_ra_de(rightascension, declination, false));
   }
 
-  virtual void slewtotarget() { }
-
-  virtual void slewtotargetasync() {
-    check_op(protocol->goto_ra_de(targetrightascension, targetdeclination, false));
+  virtual alpaca::return0_t<void> slewtotarget() {
+    return {};
   }
 
-  virtual void synctoaltaz(float altitude, float azimuth) { }
+  virtual alpaca::return0_t<void> slewtotargetasync() {
+    return check_op(protocol->goto_ra_de(targetrightascension, targetdeclination, false));
+  }
 
-  virtual void synctocoordinates(
+  virtual alpaca::return0_t<void> synctoaltaz(float altitude, float azimuth) {
+    return {};
+  }
+
+  virtual alpaca::return0_t<void> synctocoordinates(
     float rightascension, float declination) {
     targetrightascension = rightascension;
     targetdeclination = declination;
 
-    check_op(protocol->goto_ra_de(rightascension, declination, false));
+    return check_op(protocol->goto_ra_de(rightascension, declination, false));
   }
 
-  virtual void synctotarget() {
+  virtual alpaca::return0_t<void> synctotarget() {
     //protocol->goto_ra_de(target_ra, target_de);
+    return {};
   }
 
-  virtual void unpark() { }
+  virtual alpaca::return0_t<void> unpark() {
+    return {};
+  }
 };
 
 }  // namespace celestron

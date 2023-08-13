@@ -88,10 +88,10 @@ struct field {
 
 struct parser_t {
   template<typename T, typename ...C>
-  static result<T, alpaca_error> parse(const arguments_t& args, const C&... cs) {
+  static result<T, alpaca_error> parse(const arguments_t& args, const field<C>&... cs) {
     return visit(
-      [](auto&&... v) {
-        return T(v...);
+      [](C&&... v) -> T {
+        return T(std::forward<C>(v)...);
       },
       cs.get(args)...
     );

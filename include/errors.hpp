@@ -18,62 +18,49 @@ struct alpaca_error {
 };
 
 // reserved error code (0x400) for property or method not implemented.
-struct not_implemented : alpaca_error {
-  not_implemented()
-  : alpaca_error(0x0400, "") { }
-};
+auto not_implemented() {
+  return alpaca_error(0x0400, "Not implemented");
+}
 
 // reserved error code (0x401) for reporting an invalid value.
-struct invalid_value : alpaca_error {
-  invalid_value()
-  : alpaca_error(0x0401, "")
-  { }
-};
+auto invalid_value() {
+  return alpaca_error(0x0401, "Invalid value");
+}
 
 // reserved error code (0x402) for reporting that a value has not been set.
-struct value_not_set : alpaca_error {
-  value_not_set()
-  : alpaca_error(0x0402, "")
-  { }
-};
+auto value_not_set() {
+  return alpaca_error(0x0402, "Value not set");
+}
 
 // reserved error code (0x407) used to indicate that the communications
 // channel is not connected.
 auto not_connected() {
   return alpaca_error(0x0407, "Not connected");
-};
+}
 
 // reserved error code (0x408) used to indicate that the attempted operation
 // is invalid because the mount is currently in a Parked state.
-struct parked : alpaca_error {
-  parked()
-  : alpaca_error(0x0408, "")
-  { }
-};
+auto parked() {
+  return alpaca_error(0x0408, "Parked");
+}
 
 // reserved error code (0x409) used to indicate that the attempted
 // operation is invalid because the mount is currently in a Slaved state.
-struct slaved : alpaca_error {
-  slaved()
-  : alpaca_error(0x0409, "")
-  { }
-};
+auto slaved() {
+  return alpaca_error(0x0409, "Slaved");
+}
 
 // reserved error code (0x40B) to indicate that the requested
 // operation can not be undertaken at this time.
-struct invalid_operation : alpaca_error {
-  invalid_operation()
-  : alpaca_error(0x040B, "")
-  { }
-};
+auto invalid_operation() {
+  return alpaca_error(0x040B, "Invalid operation");
+}
 
 // reserved error code (0x40C) to indicate that the requested
 // action is not implemented in this driver.
-struct action_not_implemented : alpaca_error {
-  action_not_implemented()
-  : alpaca_error(0x040C, "")
-  { }
-};
+auto action_not_implemented() {
+  return alpaca_error(0x040C, "Action not implemented");
+}
 
 auto custom_error(const std::string& str) {
   return alpaca_error(0x500, str);

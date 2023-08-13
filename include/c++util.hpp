@@ -61,22 +61,31 @@ template<typename Tp, typename Err>
 class result;
 
 namespace __detail {
+  struct __no_type {};
+
   template<typename T>
-  struct _error_t;
+  struct _result {
+    using type = __no_type;
+    using error = __no_type;
+  };
 
   template<typename Tp, typename Err>
-  struct _error_t<result<Tp, Err>> {
-    using type = Err;
+  struct _result<result<Tp, Err>> {
+    using type = Tp;
+    using error = Err;
   };
 
   template<typename T>
-  using error_t = typename _error_t<T>::type;
+  using type_t = typename _result<std::remove_reference_t<T>>::type;
 
   template<typename T>
-  constexpr bool is_result = false;
+  using error_t = typename _result<std::remove_reference_t<T>>::error;
+
+  template<typename T>
+  constexpr bool is_result_v = false;
 
   template<typename Tp, typename Err>
-  constexpr bool is_result<result<Tp, Err>> = true;
+  constexpr bool is_result_v<result<Tp, Err>> = true;
 
   template<typename Head, typename... Tail>
   struct _first_t {
@@ -85,6 +94,14 @@ namespace __detail {
 
   template<typename... Ts>
   using first_t = typename _first_t<std::remove_reference_t<Ts>...>::type;
+
+  template<typename... Ts>
+  concept all_results = (is_result_v<Ts> || ...);
+
+  template<typename... Ts>
+  concept all_voids = std::conjunction_v<
+    std::is_void<type_t<Ts>>...
+  >;
 
   template<typename Err, typename Head, typename... Tail>
   constexpr auto first_error(Head&& head, Tail&&... tail) -> Err {
@@ -104,8 +121,9 @@ namespace __detail {
   constexpr auto move_result(result<V, Err>&& v) -> std::variant<Tp, Err> {
     if (!v.is_error())
       return std::get<V>(v.value);
-    else
+    else {
       return std::get<Err>(v.value);
+    }
   }
 }
 
@@ -139,25 +157,25 @@ public:
   : value{__detail::move_result<V, Tp, Err>(std::forward<result<V, Err>>(v))}
   { }
 
-#if 1
   template<typename V>
   requires std::convertible_to<V, Tp> || std::convertible_to<V, Err>
   constexpr result(V&& v) noexcept
-  : value{std::forward<V>(v)}
+  : value{std::move(v)}
   { }
-#else
+
+#if 0
   template<typename V>
   requires (std::disjunction_v<std::is_same<V, Tp>, std::is_same<V, Err>>)
   constexpr result(V&& v) noexcept
   : value{std::forward<V>(v)}
   { }
-#endif
 
   template<typename V>
   requires (std::disjunction_v<std::is_same<V, Tp>, std::is_same<V, Err>>)
   constexpr result(const V& v) noexcept
   : value{v}
   { }
+#endif
 
   template<typename... Fn>
   constexpr auto match(Fn&& ...fn) {
@@ -194,7 +212,7 @@ public:
   constexpr auto flat_map(Fn&& fn) -> decltype(fn(std::declval<Tp>())) {
     using Ret = decltype(fn(std::declval<Tp>()));
 
-    static_assert(__detail::is_result<Ret>, "callable must return a result<Tp, Err>");
+    static_assert(__detail::is_result_v<Ret>, "callable must return a result<Tp, Err>");
     static_assert(std::is_same_v<Err, __detail::error_t<Ret>>, "error types must match");
 
     if (value.index() == 0) {
@@ -307,7 +325,7 @@ public:
   constexpr auto flat_map(Fn&& fn) -> decltype(fn()) {
     using Ret = decltype(fn());
 
-    static_assert(__detail::is_result<Ret>, "callable must return a result<Tp, Err>");
+    static_assert(__detail::is_result_v<Ret>, "callable must return a result<Tp, Err>");
     static_assert(std::is_same_v<Err, __detail::error_t<Ret>>, "error types must match");
 
     if (!_error) {
@@ -334,24 +352,62 @@ public:
 };
 
 template<typename Fn, typename... Ts>
+requires __detail::all_results<Ts...> && (__detail::all_voids<Ts...>)
 constexpr auto visit(Fn&& fn, Ts&&... ts) {
-  using Tp = decltype(fn(ts.get()...));
-  using Err = __detail::error_t<__detail::first_t<Ts...>>;
+  using U = decltype(fn());
+  using Tp = std::conditional_t<
+    __detail::is_result_v<U>,
+    __detail::type_t<U>,
+    U
+  >;
+  using Err = std::conditional_t<
+    __detail::is_result_v<U>,
+    __detail::error_t<U>,
+    __detail::error_t<__detail::first_t<Ts...>>
+  >;
+
+  using Ret = result<Tp, Err>;
 
   if ((ts.is_error() || ...)) {
-    return result<Tp, Err>{
+    return Ret{
       __detail::first_error<Err>(std::forward<Ts>(ts)...)
     };
   }
 
-  if constexpr (std::is_void_v<Tp>) {
-    std::invoke(std::forward<Fn>(fn), ts.get()...);
-    return result<Tp, Err>{};
-  } else {
-    return result<Tp, Err>{
-      std::invoke(std::forward<Fn>(fn), ts.get()...)
+  return Ret{
+    std::invoke(std::forward<Fn>(fn))
+  };
+}
+
+template<typename Fn, typename... Ts>
+requires __detail::all_results<Ts...> && (!__detail::all_voids<Ts...>)
+constexpr auto visit(Fn&& fn, Ts&&... ts) {
+  using U = decltype(fn(std::forward<__detail::type_t<Ts>>(ts.get())...));
+  using Tp = std::conditional_t<
+    __detail::is_result_v<U>,
+    __detail::type_t<U>,
+    U
+  >;
+  using Err = typename std::conditional_t<
+    __detail::is_result_v<U>,
+    __detail::error_t<U>,
+    __detail::error_t<__detail::first_t<Ts...>>
+  >;
+
+  using Ret = result<Tp, Err>;
+
+  if ((ts.is_error() || ...)) {
+    return Ret{
+      __detail::first_error<Err>(std::forward<Ts>(ts)...)
     };
   }
+
+  return Ret{
+    std::invoke(
+      std::forward<Fn>(fn),
+      std::forward<__detail::type_t<Ts>>(ts.get())...
+    )
+  };
 }
 
 #endif  // CPP_UTIL

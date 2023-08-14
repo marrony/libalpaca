@@ -116,52 +116,86 @@ namespace __detail {
       );
     }
   }
-
-  template<typename V, typename Tp, typename Err>
-  constexpr auto move_result(result<V, Err>&& v) -> std::variant<Tp, Err> {
-    if (!v.is_error())
-      return std::get<V>(v._value);
-    else {
-      return std::get<Err>(v._value);
-    }
-  }
 }
 
 template<typename Tp, typename Err>
 class result {
-  using type = std::variant<Tp, Err>;
 
-  type _value;
+  union {
+    Tp  _value;
+    Err _error;
+  };
+
+  bool _has_value;
 
   template<typename, typename>
   friend class result;
-
-  template<typename V, typename Tp1, typename Err1>
-  friend constexpr auto __detail::move_result(result<V, Err1>&& v) -> std::variant<Tp1, Err1>;
 public:
-  constexpr result(result&& v) noexcept
-  : _value{std::move(v._value)}
-  { }
+  constexpr result() noexcept = delete;
 
-  constexpr result(const result& v) noexcept
-  : _value{v._value}
+  constexpr result(const result& other) noexcept
+  : _has_value{other._has_value}
+  {
+    if (_has_value)
+      std::construct_at(&_value, other._value);
+    else
+      std::construct_at(&_error, other._error);
+  }
+
+  template<typename V>
+  requires std::convertible_to<V, Tp>
+  constexpr result(result<V, Err>&& other) noexcept
+  : _has_value(other._has_value)
+  {
+    if (_has_value)
+      std::construct_at(&_value, std::move(other)._value);
+    else
+      std::construct_at(&_error, std::move(other)._error);
+  }
+
+  template<typename V>
+  requires std::convertible_to<V, Tp>
+  constexpr result(const V& v) noexcept
+  : _value{v}
+  , _has_value{true}
   { }
 
   template<typename V>
   requires std::convertible_to<V, Tp>
-  constexpr result(result<V, Err>&& v) noexcept
-  : _value{__detail::move_result<V, Tp, Err>(std::forward<result<V, Err>>(v))}
+  constexpr result(V&& v) noexcept
+  : _value{std::forward<V>(v)}
+  , _has_value{true}
   { }
 
-  template<typename V>
-  requires std::convertible_to<V, Tp> || std::convertible_to<V, Err>
-  constexpr result(V&& v) noexcept
-  : _value{std::move(v)}
-  { }
+  constexpr result(const Err& v) noexcept
+  : _error{v}
+  , _has_value{false}
+  {
+    //std::construct_at(&_error, v);
+  }
+
+  constexpr result(Err&& v) noexcept
+  : _error{std::forward<Err>(v)}
+  , _has_value{false}
+  {
+    //std::construct_at(&_error, std::forward<Err>(v));
+  }
+
+  constexpr ~result() {
+    if (_has_value)
+      std::destroy_at(&_value);
+    else
+      std::destroy_at(&_error);
+  }
 
   template<typename... Fn>
   constexpr auto match(Fn&& ...fn) const {
-    return std::visit(overloaded{fn...}, _value);
+    auto ov = overloaded{fn...};
+
+    if (_has_value)
+      return ov(_value);
+
+    return ov(_error);
   }
 
   template<typename Fn>
@@ -169,11 +203,11 @@ public:
     using U = decltype(fn(std::declval<Tp>()));
     using Ret = result<U, Err>;
 
-    if (_value.index() == 0) {
+    if (_has_value) {
       if constexpr (std::is_void_v<U>) {
         std::invoke(
           std::forward<Fn>(fn),
-          std::get<Tp>(_value)
+          _value
         );
 
         return Ret{};
@@ -181,12 +215,12 @@ public:
         return Ret{
           std::invoke(
             std::forward<Fn>(fn),
-            std::get<Tp>(_value)
+            _value
           )
         };
       }
     } else {
-      return Ret{std::get<Err>(_value)};
+      return Ret{_error};
     }
   }
 
@@ -197,50 +231,50 @@ public:
     static_assert(__detail::is_result_v<Ret>, "callable must return a result<Tp, Err>");
     static_assert(std::is_same_v<Err, __detail::error_t<Ret>>, "error types must match");
 
-    if (_value.index() == 0) {
+    if (_has_value) {
       return std::invoke(
         std::forward<Fn>(fn),
-        std::get<Tp>(_value)
+        _value
       );
     } else {
-      return Ret{std::get<Err>(_value)};
+      return Ret{_error};
     }
   }
 
   constexpr Tp& get() & {
-    return std::get<0>(_value);
+    return _value;
   }
 
   constexpr const Tp& get() const & {
-    return std::get<0>(_value);
+    return _value;
   }
 
   constexpr Tp&& get() && {
-    return std::move(std::get<0>(_value));
+    return std::move(_value);
   }
 
   constexpr const Tp&& get() const && {
-    return std::move(std::get<0>(_value));
+    return std::move(_value);
   }
 
   constexpr Err& error() & {
-    return std::get<1>(_value);
+    return _error;
   }
 
   constexpr const Err& error() const & {
-    return std::get<1>(_value);
+    return _error;
   }
 
   constexpr Err&& error() && {
-    return std::move(std::get<1>(_value));
+    return std::move(_error);
   }
 
   constexpr const Err&& error() const && {
-    return std::move(std::get<1>(_value));
+    return std::move(_error);
   }
 
   constexpr auto is_error() const {
-    return _value.index() > 0;
+    return !_has_value;
   }
 };
 
@@ -293,7 +327,7 @@ public:
         };
       }
     } else {
-      return Ret{*_error};
+      return Ret{std::move(_error.value())};
     }
   }
 

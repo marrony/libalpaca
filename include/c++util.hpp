@@ -383,9 +383,14 @@ constexpr auto visit(Fn&& fn, Ts&&... ts) {
     };
   }
 
-  return Ret{
-    std::invoke(std::forward<Fn>(fn))
-  };
+  if constexpr (std::is_void_v<Tp>) {
+    std::invoke(std::forward<Fn>(fn));
+    return Ret{};
+  } else {
+    return Ret{
+      std::invoke(std::forward<Fn>(fn))
+    };
+  }
 }
 
 template<typename Fn, typename... Ts>
@@ -411,12 +416,22 @@ constexpr auto visit(Fn&& fn, Ts&&... ts) {
     };
   }
 
-  return Ret{
+  if constexpr (std::is_void_v<Tp>) {
     std::invoke(
       std::forward<Fn>(fn),
       std::forward<__detail::type_t<Ts>>(ts.get())...
-    )
-  };
+    );
+    return Ret{};
+  } else {
+    return Ret{
+      std::invoke(
+        std::forward<Fn>(fn),
+        std::forward<__detail::type_t<Ts>>(ts.get())...
+      )
+    };
+  }
 }
+
+#include "c++util-asserts.hpp"
 
 #endif  // CPP_UTIL

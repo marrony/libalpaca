@@ -26,8 +26,8 @@ class serial {
       return -1;
     }
 
-    cfsetospeed(&tty, (speed_t)speed);
-    cfsetispeed(&tty, (speed_t)speed);
+    cfsetospeed(&tty, static_cast<speed_t>(speed));
+    cfsetispeed(&tty, static_cast<speed_t>(speed));
 
     tty.c_cflag |= (CLOCAL | CREAD);    /* ignore modem controls */
     tty.c_cflag &= ~CSIZE;

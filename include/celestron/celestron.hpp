@@ -771,7 +771,7 @@ struct simulator_protocol : nexstar_protocol {
   }
 
   virtual int send_command(
-    const void* in_ptr, int in_size, void* out_ptr, int out_size) {
+    const void* in_ptr, int, void* out_ptr, int out_size) {
 
     const char* in = reinterpret_cast<const char*>(in_ptr);
     char* out = reinterpret_cast<char*>(out_ptr);
@@ -1145,8 +1145,7 @@ class celestron_telescope : public alpaca::telescope {
       });
   }
 
-  virtual alpaca::return_t<alpaca::destination_side_of_pier_t> get_destinationsideofpier(
-    float rightascension, float declination) const {
+  virtual alpaca::return_t<alpaca::destination_side_of_pier_t> get_destinationsideofpier(float, float) const {
     return alpaca::destination_side_of_pier_t::pier_unknown;
   }
 
@@ -1260,7 +1259,7 @@ class celestron_telescope : public alpaca::telescope {
     return {};
   }
 
-  virtual alpaca::return_t<void> pulseguide(int direction, int duration) {
+  virtual alpaca::return_t<void> pulseguide(int, int) {
     return {};
   }
 
@@ -1268,15 +1267,15 @@ class celestron_telescope : public alpaca::telescope {
     return {};
   }
 
-  virtual alpaca::return_t<void> slewtoaltaz(float altitude, float azimuth) {
+  virtual alpaca::return_t<void> slewtoaltaz(float, float) {
     return {};
   }
 
-  virtual alpaca::return_t<void> slewtoaltazasync(float altitude, float azimuth) {
+  virtual alpaca::return_t<void> slewtoaltazasync(float, float) {
     return {};
   }
 
-  virtual alpaca::return_t<void> slewtocoordinates(float rightascension, float declination) {
+  virtual alpaca::return_t<void> slewtocoordinates(float, float) {
     return {};
   }
 
@@ -1294,7 +1293,7 @@ class celestron_telescope : public alpaca::telescope {
     return check_op(protocol->goto_ra_de(targetrightascension, targetdeclination, false));
   }
 
-  virtual alpaca::return_t<void> synctoaltaz(float altitude, float azimuth) {
+  virtual alpaca::return_t<void> synctoaltaz(float, float) {
     return {};
   }
 

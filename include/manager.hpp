@@ -24,8 +24,8 @@ class device_manager {
     apiversions_resource() { }
 
     virtual return_t<json_value> handle_get(
-      const httpserver::http_request& req,
-      const arguments_t& args) {
+      const httpserver::http_request&,
+      const arguments_t&) {
       json_array response = { 1 };
       return static_cast<json_value>(response);
     }
@@ -36,17 +36,15 @@ class device_manager {
     description_resource() { }
 
     virtual return_t<json_value> handle_get(
-      const httpserver::http_request& req,
-      const arguments_t& args) {
+      const httpserver::http_request&,
+      const arguments_t&) {
 
-      return static_cast<json_value>(
-        (json_object) {
-          {"ServerName", "Alpaca Telescope Server"},
-          {"Manufacturer", "Marrony Neris"},
-          {"ManufacturerVersion", "0.0.1"},
-          {"Location", "US"}
-        }
-      );
+      return json_object {
+        {"ServerName", "Alpaca Telescope Server"},
+        {"Manufacturer", "Marrony Neris"},
+        {"ManufacturerVersion", "0.0.1"},
+        {"Location", "US"}
+      };
     }
   };
 
@@ -57,28 +55,28 @@ class device_manager {
     : manager(manager) { }
 
     virtual return_t<json_value> handle_get(
-      const httpserver::http_request& req,
-      const arguments_t& args) {
+      const httpserver::http_request&,
+      const arguments_t&) {
       json_array response;
 
-      (void)manager;
+      // todo(marrony): implement folding
+      for (auto&& dev : manager->devices) {
+        dev->get_deviceinfo().match(
+          [&response](const deviceinfo_t& info) {
+            response.push_back(json_object {
+              {"DeviceName", info.name},
+              {"DeviceType", info.device_type},
+              {"DeviceNumber", info.device_number},
+              {"UniqueID", info.unique_id},
+            });
+          },
+          [](const alpaca_error&) {
+            //todo(marrony)
+          }
+        );
+      }
 
-      /*std::transform(
-        std::cbegin(manager->devices),
-        std::cend(manager->devices),
-        std::back_inserter(response),
-        [](device* device) {
-          deviceinfo_t info = device->get_deviceinfo();
-
-          return (json_object) {
-            {"DeviceName", info.name},
-            {"DeviceType", info.device_type},
-            {"DeviceNumber", info.device_number},
-            {"UniqueID", info.unique_id},
-          };
-        });*/
-
-      return static_cast<json_value>(response);
+      return response;
     }
   };
 

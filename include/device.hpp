@@ -192,25 +192,25 @@ class device_resource : public alpaca_resource {
  public:
   device_resource(const std::string& device_type)
   : device_type(device_type), devices() {
-    define_put("action", [](T* device, const arguments_t& args) {
+    define_put("action", [](T* device, const arguments_t&) {
       return device->put_action();
     });
 
-    define_put("commandblind", [](T* device, const arguments_t& args) {
+    define_put("commandblind", [](T* device, const arguments_t&) {
       return device->put_commandblind();
     });
 
-    define_put("commandbool", [](T* device, const arguments_t& args) {
+    define_put("commandbool", [](T* device, const arguments_t&) {
       return device->put_commandbool();
     });
 
-    define_put("commandstring", [](T* device, const arguments_t& args) {
+    define_put("commandstring", [](T* device, const arguments_t&) {
       return device->put_commandstring();
     });
 
     define_ops(
       "connected",
-      [](const T* dev, const arguments_t& args) -> return_t<json_value> {
+      [](const T* dev, const arguments_t&) -> return_t<json_value> {
         return dev->get_connected();
       },
       [](T* dev, const arguments_t& args) {
@@ -220,31 +220,32 @@ class device_resource : public alpaca_resource {
           });
       });
 
-    define_get("description", [](const T* dev, const arguments_t& args) -> return_t<json_value> {
+    define_get("description", [](const T* dev, const arguments_t&) -> return_t<json_value> {
       return dev->get_description();
     });
-    define_get("driverinfo", [](const T* dev, const arguments_t& args) -> return_t<json_value> {
+    define_get("driverinfo", [](const T* dev, const arguments_t&) -> return_t<json_value> {
       return dev->get_driverinfo();
     });
-    define_get("driverversion", [](const T* dev, const arguments_t& args) -> return_t<json_value> {
+    define_get("driverversion", [](const T* dev, const arguments_t&) -> return_t<json_value> {
       return dev->get_driverversion();
     });
-    define_get("interfaceversion", [](const T* dev, const arguments_t& args) -> return_t<json_value> {
+    define_get("interfaceversion", [](const T* dev, const arguments_t&) -> return_t<json_value> {
       return dev->get_interfaceversion();
     });
-    define_get("name", [](const T* dev, const arguments_t& args) -> return_t<json_value> {
+    define_get("name", [](const T* dev, const arguments_t&) -> return_t<json_value> {
       return dev->get_name();
     });
 
     define_get("supportedactions", [](const T* dev, const arguments_t&) -> return_t<json_value> {
-      json_array actions;
-      /*auto supportedactions = dev->get_supportedactions();
-      std::copy(
-        std::cbegin(supportedactions),
-        std::cend(supportedactions),
-        std::begin(actions)
-      );*/
-      return static_cast<json_value>(actions);
+      return dev->get_supportedactions().map([](const auto& supportedactions) {
+        json_array actions;
+        std::copy(
+          std::cbegin(supportedactions),
+          std::cend(supportedactions),
+          std::begin(actions)
+        );
+        return actions;
+      });
     });
   }
 

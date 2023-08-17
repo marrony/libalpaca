@@ -762,7 +762,7 @@ class telescope : public device {
   virtual return_t<float> get_siderealtime() const {
     return not_implemented();
   }
-  virtual return_t<destination_side_of_pier_t> get_destinationsideofpier(float rightascension, float declination) const {
+  virtual return_t<destination_side_of_pier_t> get_destinationsideofpier(float, float) const {
     return not_implemented();
   }
 
@@ -873,7 +873,7 @@ class telescope : public device {
   virtual return_t<driver_rate_t> get_trackingrate() const {
     return driver_rate_t::sidereal;
   }
-  virtual return_t<void> put_trackingrate(driver_rate_t rate) {
+  virtual return_t<void> put_trackingrate(driver_rate_t) {
     return not_implemented();
   }
 
@@ -959,28 +959,28 @@ class telescope : public device {
   virtual return_t<void> findhome() {
     return not_implemented();
   }
-  virtual return_t<void> moveaxis(int axis, float rate) {
+  virtual return_t<void> moveaxis(int, float) {
     return not_implemented();
   }
   virtual return_t<void> park() {
     return not_implemented();
   }
-  virtual return_t<void> pulseguide(int direction, int duration) {
+  virtual return_t<void> pulseguide(int, int) {
     return not_implemented();
   }
   virtual return_t<void> setpark() {
     return not_implemented();
   }
-  virtual return_t<void> slewtoaltaz(float altitude, float azimuth) {
+  virtual return_t<void> slewtoaltaz(float, float) {
     return not_implemented();
   }
-  virtual return_t<void> slewtoaltazasync(float altitude, float azimuth) {
+  virtual return_t<void> slewtoaltazasync(float, float) {
     return not_implemented();
   }
-  virtual return_t<void> slewtocoordinates(float rightascension, float declination) {
+  virtual return_t<void> slewtocoordinates(float, float) {
     return not_implemented();
   }
-  virtual return_t<void> slewtocoordinatesasync(float rightascension, float declination) {
+  virtual return_t<void> slewtocoordinatesasync(float, float) {
     return not_implemented();
   }
   virtual return_t<void> slewtotarget() {
@@ -989,10 +989,10 @@ class telescope : public device {
   virtual return_t<void> slewtotargetasync() {
     return not_implemented();
   }
-  virtual return_t<void> synctoaltaz(float altitude, float azimuth) {
+  virtual return_t<void> synctoaltaz(float, float) {
     return not_implemented();
   }
-  virtual return_t<void> synctocoordinates(float rightascension, float declination) {
+  virtual return_t<void> synctocoordinates(float, float) {
     return not_implemented();
   }
   virtual return_t<void> synctotarget() {
@@ -1008,31 +1008,31 @@ class telescope_resource : public device_resource<telescope> {
   telescope_resource()
   : device_resource("telescope") {
     // read-only properties
-    define_get("altitude", [](const telescope* tel, const arguments_t& args) {
+    define_get("altitude", [](const telescope* tel, const arguments_t&) {
       return tel->priv_get_altitude();
     });
-    define_get("azimuth", [](const telescope* tel, const arguments_t& args) {
+    define_get("azimuth", [](const telescope* tel, const arguments_t&) {
       return tel->priv_get_azimuth();
     });
-    define_get("declination", [](const telescope* tel, const arguments_t& args) {
+    define_get("declination", [](const telescope* tel, const arguments_t&) {
       return tel->priv_get_declination();
     });
-    define_get("rightascension", [](const telescope* tel, const arguments_t& args) {
+    define_get("rightascension", [](const telescope* tel, const arguments_t&) {
       return tel->priv_get_rightascension();
     });
-    define_get("athome", [](const telescope* tel, const arguments_t& args) {
+    define_get("athome", [](const telescope* tel, const arguments_t&) {
       return tel->priv_get_athome();
     });
-    define_get("atpark", [](const telescope* tel, const arguments_t& args) {
+    define_get("atpark", [](const telescope* tel, const arguments_t&) {
       return tel->priv_get_atpark();
     });
-    define_get("ispulseguiding", [](const telescope* tel, const arguments_t& args) {
+    define_get("ispulseguiding", [](const telescope* tel, const arguments_t&) {
       return tel->priv_get_ispulseguiding();
     });
-    define_get("slewing", [](const telescope* tel, const arguments_t& args) {
+    define_get("slewing", [](const telescope* tel, const arguments_t&) {
       return tel->priv_get_slewing();
     });
-    define_get("siderealtime", [](const telescope* tel, const arguments_t& args) {
+    define_get("siderealtime", [](const telescope* tel, const arguments_t&) {
       return tel->priv_get_siderealtime();
     });
     define_get("destinationsideofpier", [](const telescope* tel, const arguments_t& args) {
@@ -1045,22 +1045,22 @@ class telescope_resource : public device_resource<telescope> {
     });
 
     // constants
-    define_get("alignmentmode", [](const telescope* tel, const arguments_t& args) {
+    define_get("alignmentmode", [](const telescope* tel, const arguments_t&) {
       return tel->get_alignmentmode()
         .map([](alignment_mode_t alignmentmode) {
           return static_cast<int>(alignmentmode);
         });
     });
-    define_get("aperturearea", [](const telescope* tel, const arguments_t& args) {
+    define_get("aperturearea", [](const telescope* tel, const arguments_t&) {
       return tel->get_aperturearea();
     });
-    define_get("aperturediameter", [](const telescope* tel, const arguments_t& args) {
+    define_get("aperturediameter", [](const telescope* tel, const arguments_t&) {
       return tel->get_aperturediameter();
     });
-    define_get("focallength", [](const telescope* tel, const arguments_t& args) {
+    define_get("focallength", [](const telescope* tel, const arguments_t&) {
       return tel->get_focallength();
     });
-    define_get("equatorialsystem", [](const telescope* tel, const arguments_t& args) {
+    define_get("equatorialsystem", [](const telescope* tel, const arguments_t&) {
       return tel->get_equatorialsystem()
         .map([](equatorial_system_t equatorialsystem) {
           return static_cast<int>(equatorialsystem);
@@ -1082,7 +1082,7 @@ class telescope_resource : public device_resource<telescope> {
           });
         });
     });
-    define_get("trackingrates", [](const telescope* tel, const arguments_t& args) {
+    define_get("trackingrates", [](const telescope* tel, const arguments_t&) {
       return tel->get_trackingrates()
         .map([](auto&& trackingrates) {
           json_array out_trackingrates;
@@ -1101,7 +1101,7 @@ class telescope_resource : public device_resource<telescope> {
     });
 
     // flags
-    define_get("canfindhome", [](const telescope* tel, const arguments_t& args) {
+    define_get("canfindhome", [](const telescope* tel, const arguments_t&) {
       return tel->get_canfindhome();
     });
     define_get("canmoveaxis", [](const telescope* tel, const arguments_t& args) {
@@ -1112,56 +1112,56 @@ class telescope_resource : public device_resource<telescope> {
           });
         });
     });
-    define_get("canpark", [](const telescope* tel, const arguments_t& args) {
+    define_get("canpark", [](const telescope* tel, const arguments_t&) {
       return tel->get_canpark();
     });
-    define_get("canpulseguide", [](const telescope* tel, const arguments_t& args) {
+    define_get("canpulseguide", [](const telescope* tel, const arguments_t&) {
       return tel->get_canpulseguide();
     });
-    define_get("cansetdeclinationrate", [](const telescope* tel, const arguments_t& args) {
+    define_get("cansetdeclinationrate", [](const telescope* tel, const arguments_t&) {
       return tel->get_cansetdeclinationrate();
     });
-    define_get("cansetguiderates", [](const telescope* tel, const arguments_t& args) {
+    define_get("cansetguiderates", [](const telescope* tel, const arguments_t&) {
       return tel->get_cansetguiderates();
     });
-    define_get("cansetpark", [](const telescope* tel, const arguments_t& args) {
+    define_get("cansetpark", [](const telescope* tel, const arguments_t&) {
       return tel->get_cansetpark();
     });
-    define_get("cansetpierside", [](const telescope* tel, const arguments_t& args) {
+    define_get("cansetpierside", [](const telescope* tel, const arguments_t&) {
       return tel->get_cansetpierside();
     });
-    define_get("cansetrightascensionrate", [](const telescope* tel, const arguments_t& args) {
+    define_get("cansetrightascensionrate", [](const telescope* tel, const arguments_t&) {
       return tel->get_cansetrightascensionrate();
     });
-    define_get("cansettracking", [](const telescope* tel, const arguments_t& args) {
+    define_get("cansettracking", [](const telescope* tel, const arguments_t&) {
       return tel->get_cansettracking();
     });
-    define_get("canslew", [](const telescope* tel, const arguments_t& args) {
+    define_get("canslew", [](const telescope* tel, const arguments_t&) {
       return tel->get_canslew();
     });
-    define_get("canslewaltaz", [](const telescope* tel, const arguments_t& args) {
+    define_get("canslewaltaz", [](const telescope* tel, const arguments_t&) {
       return tel->get_canslewaltaz();
     });
-    define_get("canslewaltazasync", [](const telescope* tel, const arguments_t& args) {
+    define_get("canslewaltazasync", [](const telescope* tel, const arguments_t&) {
       return tel->get_canslewaltazasync();
     });
-    define_get("canslewasync", [](const telescope* tel, const arguments_t& args) {
+    define_get("canslewasync", [](const telescope* tel, const arguments_t&) {
       return tel->get_canslewasync();
     });
-    define_get("cansync", [](const telescope* tel, const arguments_t& args) {
+    define_get("cansync", [](const telescope* tel, const arguments_t&) {
       return tel->get_cansync();
     });
-    define_get("cansyncaltaz", [](const telescope* tel, const arguments_t& args) {
+    define_get("cansyncaltaz", [](const telescope* tel, const arguments_t&) {
       return tel->get_cansyncaltaz();
     });
-    define_get("canunpark", [](const telescope* tel, const arguments_t& args) {
+    define_get("canunpark", [](const telescope* tel, const arguments_t&) {
       return tel->get_canunpark();
     });
 
     // read-wrie properties
     define_ops(
       "declinationrate",
-      [](const telescope* tel, const arguments_t& args) {
+      [](const telescope* tel, const arguments_t&) {
         return tel->priv_get_declinationrate();
       },
       [](telescope* tel, const arguments_t& args) {
@@ -1172,7 +1172,7 @@ class telescope_resource : public device_resource<telescope> {
       });
     define_ops(
       "doesrefraction",
-      [](const telescope* tel, const arguments_t& args) {
+      [](const telescope* tel, const arguments_t&) {
         return tel->priv_get_doesrefraction();
       },
       [](telescope* tel, const arguments_t& args) {
@@ -1183,7 +1183,7 @@ class telescope_resource : public device_resource<telescope> {
       });
     define_ops(
       "guideratedeclination",
-      [](const telescope* tel, const arguments_t& args) {
+      [](const telescope* tel, const arguments_t&) {
         return tel->priv_get_guideratedeclination();
       },
       [](telescope* tel, const arguments_t& args) {
@@ -1194,7 +1194,7 @@ class telescope_resource : public device_resource<telescope> {
       });
     define_ops(
       "guideraterightascension",
-      [](const telescope* tel, const arguments_t& args) {
+      [](const telescope* tel, const arguments_t&) {
         return tel->priv_get_guideraterightascension();
       },
       [](telescope* tel, const arguments_t& args) {
@@ -1205,7 +1205,7 @@ class telescope_resource : public device_resource<telescope> {
       });
     define_ops(
       "rightascensionrate",
-      [](const telescope* tel, const arguments_t& args) {
+      [](const telescope* tel, const arguments_t&) {
         return tel->priv_get_rightascensionrate();
       },
       [](telescope* tel, const arguments_t& args) {
@@ -1216,7 +1216,7 @@ class telescope_resource : public device_resource<telescope> {
       });
     define_ops(
       "sideofpier",
-      [](const telescope* tel, const arguments_t& args) {
+      [](const telescope* tel, const arguments_t&) {
         return tel->priv_get_sideofpier();
       },
       [](telescope* tel, const arguments_t& args) {
@@ -1227,7 +1227,7 @@ class telescope_resource : public device_resource<telescope> {
       });
     define_ops(
       "siteelevation",
-      [](const telescope* tel, const arguments_t& args) {
+      [](const telescope* tel, const arguments_t&) {
         return tel->priv_get_siteelevation();
       },
       [](telescope* tel, const arguments_t& args) {
@@ -1238,7 +1238,7 @@ class telescope_resource : public device_resource<telescope> {
       });
     define_ops(
       "sitelatitude",
-      [](const telescope* tel, const arguments_t& args) {
+      [](const telescope* tel, const arguments_t&) {
         return tel->priv_get_sitelatitude();
       },
       [](telescope* tel, const arguments_t& args) {
@@ -1249,7 +1249,7 @@ class telescope_resource : public device_resource<telescope> {
       });
     define_ops(
       "sitelongitude",
-      [](const telescope* tel, const arguments_t& args) {
+      [](const telescope* tel, const arguments_t&) {
         return tel->priv_get_sitelongitude();
       },
       [](telescope* tel, const arguments_t& args) {
@@ -1260,7 +1260,7 @@ class telescope_resource : public device_resource<telescope> {
       });
     define_ops(
       "slewsettletime",
-      [](const telescope* tel, const arguments_t& args) {
+      [](const telescope* tel, const arguments_t&) {
         return tel->priv_get_slewsettletime();
       },
       [](telescope* tel, const arguments_t& args) {
@@ -1271,7 +1271,7 @@ class telescope_resource : public device_resource<telescope> {
       });
     define_ops(
       "targetdeclination",
-      [](const telescope* tel, const arguments_t& args) {
+      [](const telescope* tel, const arguments_t&) {
         return tel->priv_get_targetdeclination();
       },
       [](telescope* tel, const arguments_t& args) {
@@ -1282,7 +1282,7 @@ class telescope_resource : public device_resource<telescope> {
       });
     define_ops(
       "targetrightascension",
-      [](const telescope* tel, const arguments_t& args) {
+      [](const telescope* tel, const arguments_t&) {
         return tel->priv_get_targetrightascension();
       },
       [](telescope* tel, const arguments_t& args) {
@@ -1293,7 +1293,7 @@ class telescope_resource : public device_resource<telescope> {
       });
     define_ops(
       "tracking",
-      [](const telescope* tel, const arguments_t& args) {
+      [](const telescope* tel, const arguments_t&) {
         return tel->priv_get_tracking();
       },
       [](telescope* tel, const arguments_t& args) {
@@ -1304,7 +1304,7 @@ class telescope_resource : public device_resource<telescope> {
       });
     define_ops(
       "trackingrate",
-      [](const telescope* tel, const arguments_t& args) {
+      [](const telescope* tel, const arguments_t&) {
         return tel->priv_get_trackingrate()
           .map([](driver_rate_t t) {
             return static_cast<int>(t);
@@ -1312,13 +1312,13 @@ class telescope_resource : public device_resource<telescope> {
       },
       [](telescope* tel, const arguments_t& args) {
         return parser::parser_t::parse<int>(args, fields::trackingrate_f)
-          .flat_map([=](float trackingrate) {
+          .flat_map([=](int trackingrate) {
             return tel->priv_put_trackingrate(trackingrate);
           });
       });
     define_ops(
       "utcdate",
-      [](const telescope* tel, const arguments_t& args) {
+      [](const telescope* tel, const arguments_t&) {
         return tel->priv_get_utcdate();
       },
       [](telescope* tel, const arguments_t& args) {
@@ -1329,28 +1329,28 @@ class telescope_resource : public device_resource<telescope> {
       });
 
     // operations
-    define_put("abortslew", [](telescope* tel, const arguments_t& args) {
+    define_put("abortslew", [](telescope* tel, const arguments_t&) {
       return tel->priv_abortslew();
     });
-    define_put("findhome", [](telescope* tel, const arguments_t& args) {
+    define_put("findhome", [](telescope* tel, const arguments_t&) {
       return tel->priv_findhome();
     });
-    define_put("setpark", [](telescope* tel, const arguments_t& args) {
+    define_put("setpark", [](telescope* tel, const arguments_t&) {
       return tel->priv_setpark();
     });
-    define_put("park", [](telescope* tel, const arguments_t& args) {
+    define_put("park", [](telescope* tel, const arguments_t&) {
       return tel->priv_park();
     });
-    define_put("slewtotarget", [](telescope* tel, const arguments_t& args) {
+    define_put("slewtotarget", [](telescope* tel, const arguments_t&) {
       return tel->priv_slewtotarget();
     });
-    define_put("slewtotargetasync", [](telescope* tel, const arguments_t& args) {
+    define_put("slewtotargetasync", [](telescope* tel, const arguments_t&) {
       return tel->priv_slewtotargetasync();
     });
-    define_put("synctotarget", [](telescope* tel, const arguments_t& args) {
+    define_put("synctotarget", [](telescope* tel, const arguments_t&) {
       return tel->priv_synctotarget();
     });
-    define_put("unpark", [](telescope* tel, const arguments_t& args) {
+    define_put("unpark", [](telescope* tel, const arguments_t&) {
       return tel->priv_unpark();
     });
     define_put("moveaxis", [](telescope* tel, const arguments_t& args) {

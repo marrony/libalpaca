@@ -8,8 +8,8 @@
 namespace alpaca {
 
 struct alpaca_error {
-  const int error_number;
-  const std::string error_message;
+  int error_number;
+  std::string error_message;
 };
 
 // reserved error code (0x400) for property or method not implemented.

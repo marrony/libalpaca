@@ -66,39 +66,46 @@ namespace __detail {
   struct __no_type {};
 
   template<typename T>
-  struct _result {
+  struct result_traits {
     using type = __no_type;
     using error = __no_type;
+
+    constexpr static bool is_result = false;
   };
 
   template<typename Tp, typename Err>
-  struct _result<result<Tp, Err>> {
+  struct result_traits<result<Tp, Err>> {
     using type = Tp;
     using error = Err;
+
+    constexpr static bool is_result = true;
   };
 
   template<typename T>
-  using type_t = typename _result<std::remove_reference_t<T>>::type;
+  using type_t = typename result_traits<std::remove_cvref_t<T>>::type;
 
   template<typename T>
-  using error_t = typename _result<std::remove_reference_t<T>>::error;
+  using error_t = typename result_traits<std::remove_cvref_t<T>>::error;
 
   template<typename T>
-  constexpr bool is_result_v = false;
+  constexpr bool is_result_v = result_traits<std::remove_cvref_t<T>>::is_result;
 
-  template<typename Tp, typename Err>
-  constexpr bool is_result_v<result<Tp, Err>> = true;
+  template<typename T, typename U>
+  using type_or_else = std::conditional_t<is_result_v<T>, type_t<T>, U>;
 
-  template<typename Head, typename... Tail>
-  struct _first_t {
-    using type = Head;
-  };
+  template<typename T, typename U>
+  using error_or_else = std::conditional_t<is_result_v<T>, error_t<T>, U>;
 
   template<typename Fn, typename... Ts>
   using fn_result = std::remove_cvref_t<std::invoke_result_t<Fn&&, Ts...>>;
 
+  template<typename Head, typename... Tail>
+  struct _head_t {
+    using type = Head;
+  };
+
   template<typename... Ts>
-  using first_t = typename _first_t<std::remove_reference_t<Ts>...>::type;
+  using head_t = typename _head_t<std::remove_cvref_t<Ts>...>::type;
 
   template<typename... Ts>
   concept all_results = (is_result_v<Ts> || ...);
@@ -369,16 +376,8 @@ template<typename Fn, typename... Ts>
 requires __detail::all_results<Ts...> && (__detail::all_voids<Ts...>)
 constexpr auto visit(Fn&& fn, Ts&&... ts) {
   using U = __detail::fn_result<Fn>;
-  using Tp = std::conditional_t<
-    __detail::is_result_v<U>,
-    __detail::type_t<U>,
-    U
-  >;
-  using Err = std::conditional_t<
-    __detail::is_result_v<U>,
-    __detail::error_t<U>,
-    __detail::error_t<__detail::first_t<Ts...>>
-  >;
+  using Tp = __detail::type_or_else<U, U>;
+  using Err = __detail::error_or_else<U, __detail::error_t<__detail::head_t<Ts...>>>;
 
   using Ret = result<Tp, Err>;
 
@@ -402,16 +401,8 @@ template<typename Fn, typename... Ts>
 requires __detail::all_results<Ts...> && (!__detail::all_voids<Ts...>)
 constexpr auto visit(Fn&& fn, Ts&&... ts) {
   using U = __detail::fn_result<Fn, __detail::type_t<Ts>...>;
-  using Tp = std::conditional_t<
-    __detail::is_result_v<U>,
-    __detail::type_t<U>,
-    U
-  >;
-  using Err = typename std::conditional_t<
-    __detail::is_result_v<U>,
-    __detail::error_t<U>,
-    __detail::error_t<__detail::first_t<Ts...>>
-  >;
+  using Tp = __detail::type_or_else<U, U>;
+  using Err = __detail::error_or_else<U, __detail::error_t<__detail::head_t<Ts...>>>;
 
   using Ret = result<Tp, Err>;
 
@@ -435,6 +426,79 @@ constexpr auto visit(Fn&& fn, Ts&&... ts) {
       )
     };
   }
+}
+
+template <typename C, typename T>
+struct rebind {
+  static_assert(not std::is_same_v<C, C>, "C must match C<T, ...>");
+};
+
+template<
+  template<typename, typename...> typename C,
+  typename T,
+  typename U
+>
+struct rebind<C<T>, U> {
+  using type = C<U>;
+};
+
+template<typename C, typename T>
+using rebind_t = typename rebind<C, T>::type;
+
+template<typename C, typename Fn>
+constexpr auto flatten(C&& container, Fn&& fn) {
+  using Cont = std::remove_cvref_t<C>;
+  using T = typename Cont::value_type;
+
+  using FnRet = __detail::fn_result<Fn, T>;
+  static_assert(__detail::is_result_v<FnRet>, "Callable must return result<Tp, Err>");
+
+  using Tp = __detail::type_t<FnRet>;
+  using Err = __detail::error_t<FnRet>;
+  using OutC = rebind_t<Cont, Tp>;
+  using Ret = result<OutC, Err>;
+
+  OutC ret{};
+  auto inserter = std::back_inserter(ret);
+
+  for (auto&& v : container) {
+    auto&& fn_ret = std::invoke(std::move(fn), v);
+
+    if (fn_ret.is_error()) {
+      return Ret{ std::move(fn_ret).error() };
+    }
+
+    ++inserter = std::move(fn_ret).get();
+  }
+
+  return Ret{std::move(ret)};
+}
+
+//C<result<Tp, Err>> => result<C<Tp>, Err>
+template<typename C>
+constexpr auto flatten(C&& container) {
+  using Cont = std::remove_cvref_t<C>;
+  using T = typename Cont::value_type;
+
+  static_assert(__detail::is_result_v<T>, "container");
+
+  using Tp = __detail::type_t<T>;
+  using Err = __detail::error_t<T>;
+  using OutC = rebind_t<Cont, Tp>;
+  using Ret = result<OutC, Err>;
+
+  OutC ret{};
+  auto inserter = std::back_inserter(ret);
+
+  for (auto&& v : container) {
+    if (v.is_error()) {
+      return Ret{ std::move(v).error() };
+    }
+
+    ++inserter = std::move(v).get();
+  }
+
+  return Ret{ ret };
 }
 
 #include "c++util-asserts.hpp"

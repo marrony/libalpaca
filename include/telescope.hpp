@@ -1069,16 +1069,22 @@ class telescope_resource : public device_resource<telescope> {
     define_get("axisrates", [](const telescope* tel, const arguments_t& args) {
       return parser::parser_t::parse<int>(args, fields::axis_f)
         .flat_map([tel](int axis) {
-          return tel->get_axisrates(axis).map([](auto&& axis_rates) {
-            json_array axisrates;
-            for (const auto& r : axis_rates) {
-              json_object rate = {
-                {"Minimum", r.minimum},
-                {"Maximum", r.maximum}
-              };
-              axisrates.push_back(rate);
-            }
-            return static_cast<json_value>(axisrates);
+          return tel->get_axisrates(axis).map([](auto&& axisrates) {
+            json_array out_axisrates;
+
+            std::transform(
+              std::cbegin(axisrates),
+              std::cend(axisrates),
+              std::back_inserter(out_axisrates),
+              [](auto&& r) {
+                return json_object {
+                  {"Minimum", r.minimum},
+                  {"Maximum", r.maximum}
+                };
+              }
+            );
+
+            return out_axisrates;
           });
         });
     });
@@ -1091,12 +1097,12 @@ class telescope_resource : public device_resource<telescope> {
             std::cbegin(trackingrates),
             std::cend(trackingrates),
             std::back_inserter(out_trackingrates),
-            [](driver_rate_t rate) {
+            [](auto&& rate) {
               return static_cast<int>(rate);
             }
           );
 
-          return static_cast<json_value>(out_trackingrates);
+          return out_trackingrates;
         });
     });
 

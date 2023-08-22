@@ -1,3 +1,48 @@
+constexpr auto check_rebind() {
+  static_assert(
+    std::is_same_v<
+      rebind_t<std::vector<int>, float>,
+      std::vector<float>
+    >
+  );
+
+  static_assert(
+    std::is_same_v<
+      rebind_t<std::set<int>, float>,
+      std::set<float>
+    >
+  );
+}
+
+constexpr auto check_result_flatten() {
+  struct error_t {};
+
+  static_assert(
+    std::is_same_v<
+      decltype(
+        flatten(
+          std::vector { 1, 2, 3 },
+          [](int i) {
+            return result<int, error_t>{ i };
+          }
+        )
+      ),
+      result<std::vector<int>, error_t>
+    >
+  );
+
+  static_assert(
+    std::is_same_v<
+      decltype(
+        flatten(
+          std::vector<result<int, error_t>> { 1, 2, 3 }
+        )
+      ),
+      result<std::vector<int>, error_t>
+    >
+  );
+}
+
 constexpr auto check_result_void() {
   struct error_t {};
   struct error2_t {};

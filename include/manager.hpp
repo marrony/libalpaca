@@ -57,26 +57,20 @@ class device_manager {
     virtual return_t<json_value> handle_get(
       const httpserver::http_request&,
       const arguments_t&) {
-      json_array response;
 
-      // todo(marrony): implement folding
-      for (auto&& dev : manager->devices) {
-        dev->get_deviceinfo().match(
-          [&response](const deviceinfo_t& info) {
-            response.push_back(json_object {
+      return flatten(
+        manager->devices,
+        [](device* dev) {
+          return dev->get_deviceinfo().map([](auto&& info) -> json_value {
+            return json_object {
               {"DeviceName", info.name},
               {"DeviceType", info.device_type},
               {"DeviceNumber", info.device_number},
               {"UniqueID", info.unique_id},
-            });
-          },
-          [](const alpaca_error&) {
-            //todo(marrony)
-          }
-        );
-      }
-
-      return response;
+            };
+          });
+        }
+      );
     }
   };
 

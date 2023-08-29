@@ -803,8 +803,8 @@ struct simulator_protocol : nexstar_protocol {
       case 'H':
         if (reinterpret_cast<const utcdate_t*>(in+1)->parse(&utcdate)) {
           out[0] = '#';
-          return 1;
           utcdate_updated = alpaca::utcdate_t::now();
+          return 1;
         } else {
           return 0;
         }

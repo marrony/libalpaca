@@ -71,7 +71,7 @@ enum class passthrough_command_kind : std::uint8_t {
   //set time      = 4, 178, 179, x, y, z, 0
 
   //misc
-  //get dev ver   = 1, dev, 254, 0, 0, 0, 2 
+  //get dev ver   = 1, dev, 254, 0, 0, 0, 2
 
 };
 
@@ -82,7 +82,7 @@ struct response_base_t {
       T            payload;
       std::uint8_t always_0x23;
     };
-    char data[sizeof(T) + sizeof(std::uint8_t)];
+    std::uint8_t data[sizeof(T) + sizeof(std::uint8_t)];
   };
 
   constexpr response_base_t() = default;
@@ -92,7 +92,7 @@ template<>
 struct response_base_t<void> {
   union {
     std::uint8_t always_0x23;
-    char data[sizeof(std::uint8_t)];
+    std::uint8_t data[sizeof(std::uint8_t)];
   };
 
   constexpr response_base_t() = default;
@@ -145,7 +145,7 @@ struct command_t {
       std::uint8_t cmd;
       Payload      payload;
     };
-    char data[sizeof(std::uint8_t) + sizeof(Payload)];
+    std::uint8_t data[sizeof(std::uint8_t) + sizeof(Payload)];
   };
 
   template<typename... Args>
@@ -159,7 +159,7 @@ template<std::uint8_t CMD>
 struct command_t<CMD, void> {
   union {
     std::uint8_t cmd;
-    char data[sizeof(std::uint8_t)];
+    std::uint8_t data[sizeof(std::uint8_t)];
   };
 
   constexpr command_t()
@@ -298,7 +298,7 @@ struct alignas(1) passthrough_command_t {
 struct slew_variable_command_t {
   union {
     passthrough_command_t cmd;
-    char data[8];
+    std::uint8_t data[8];
   };
 
   constexpr slew_variable_command_t(int axis, float rate) {
@@ -1151,7 +1151,7 @@ class celestron_telescope : public alpaca::telescope {
 
   // read-wrie properties
   virtual alpaca::return_t<float> get_sitelatitude() const {
-		float latitude = 0, longitude = 0;
+    float latitude = 0, longitude = 0;
 
     return check_op(protocol->get_location(&latitude, &longitude))
       .map([latitude]() {

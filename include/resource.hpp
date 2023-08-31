@@ -102,13 +102,13 @@ class alpaca_resource : public httpserver::http_resource {
 
     static std::atomic<int> server_transaction_id;
 
-    auto create_output = [&](const json_value& value, int error_number = 0, const std::string& error_message = "") -> json_value {
+    auto create_output = [&](const json_value& value, int error_number = 0, const std::string& error_message = "") -> json_object {
       return {
         {"Value", value},
-        {"ClientID", client_id},
+        {"ClientID", static_cast<json_int>(client_id)},
         {"ErrorNumber", error_number},
         {"ErrorMessage", error_message},
-        {"ClientTransactionID", client_transaction_id},
+        {"ClientTransactionID", static_cast<json_int>(client_transaction_id)},
         {"ServerTransactionID", ++server_transaction_id}
       };
     };
@@ -128,7 +128,7 @@ class alpaca_resource : public httpserver::http_resource {
           },
           [&](const alpaca_error& error) {
             return ok(create_output(
-              nullptr,
+              static_cast<json_value>(nullptr),
               error.error_number,
               error.error_message));
           }

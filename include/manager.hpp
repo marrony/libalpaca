@@ -26,7 +26,8 @@ class device_manager {
     virtual return_t<json_value> handle_get(
       const httpserver::http_request&,
       const arguments_t&) {
-      return json_value::array({1});
+      json_array response = { 1 };
+      return static_cast<json_value>(response);
     }
   };
 
@@ -38,7 +39,7 @@ class device_manager {
       const httpserver::http_request&,
       const arguments_t&) {
 
-      return json_value {
+      return json_object {
         {"ServerName", "Alpaca Telescope Server"},
         {"Manufacturer", "Marrony Neris"},
         {"ManufacturerVersion", "0.0.1"},
@@ -56,11 +57,12 @@ class device_manager {
     virtual return_t<json_value> handle_get(
       const httpserver::http_request&,
       const arguments_t&) {
+
       return flatten(
         manager->devices,
         [](device* dev) {
-          return dev->get_deviceinfo().map([](auto&& info) {
-            return json_value {
+          return dev->get_deviceinfo().map([](auto&& info) -> json_value {
+            return json_object {
               {"DeviceName", info.name},
               {"DeviceType", info.device_type},
               {"DeviceNumber", info.device_number},
@@ -68,9 +70,7 @@ class device_manager {
             };
           });
         }
-      ).map([](const std::vector<json_value>& devs) {
-        return json_value{ devs };
-      });
+      );
     }
   };
 

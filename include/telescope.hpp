@@ -1070,14 +1070,14 @@ class telescope_resource : public device_resource<telescope> {
       return parser::parser_t::parse<int>(args, fields::axis_f)
         .flat_map([tel](int axis) {
           return tel->get_axisrates(axis).map([](auto&& axisrates) {
-            json_value out_axisrates;
+            json_array out_axisrates;
 
             std::transform(
               std::cbegin(axisrates),
               std::cend(axisrates),
               std::back_inserter(out_axisrates),
               [](auto&& r) {
-                return json_value {
+                return json_object {
                   {"Minimum", r.minimum},
                   {"Maximum", r.maximum}
                 };
@@ -1091,7 +1091,7 @@ class telescope_resource : public device_resource<telescope> {
     define_get("trackingrates", [](const telescope* tel, const arguments_t&) {
       return tel->get_trackingrates()
         .map([](auto&& trackingrates) {
-          json_value out_trackingrates;
+          json_array out_trackingrates;
 
           std::transform(
             std::cbegin(trackingrates),
@@ -1419,7 +1419,7 @@ class telescope_setup_resource : public httpserver::http_resource {
   virtual std::shared_ptr<httpserver::http_response> render(const httpserver::http_request& req) override {
     (void)resource;
 
-    json_value obj = {
+    json_object obj = {
       {"device_type", req.get_path_piece(2)},
       {"device_number", req.get_path_piece(3)},
       {"operation", req.get_path_piece(4)},

@@ -238,7 +238,7 @@ class device_resource : public alpaca_resource {
 
     define_get("supportedactions", [](const T* dev, const arguments_t&) -> return_t<json_value> {
       return dev->get_supportedactions().map([](const auto& supportedactions) {
-        json_value actions;
+        json_array actions;
         std::copy(
           std::cbegin(supportedactions),
           std::cend(supportedactions),

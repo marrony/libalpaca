@@ -146,7 +146,7 @@ public:
   constexpr result() noexcept = delete;
 
   constexpr result(const result& other) noexcept
-  : _has_value{other._has_value}
+  : _has_value(other._has_value)
   {
     if (_has_value)
       std::construct_at(&_value, other._value);
@@ -168,27 +168,27 @@ public:
   template<typename V>
   requires std::convertible_to<V, Tp>
   constexpr result(const V& v) noexcept
-  : _value{v}
-  , _has_value{true}
+  : _value(v)
+  , _has_value(true)
   { }
 
   template<typename V>
   requires std::convertible_to<V, Tp>
   constexpr result(V&& v) noexcept
-  : _value{std::forward<V>(v)}
-  , _has_value{true}
+  : _value(std::forward<V>(v))
+  , _has_value(true)
   { }
 
   constexpr result(const Err& v) noexcept
-  : _error{v}
-  , _has_value{false}
+  : _error(v)
+  , _has_value(false)
   {
     //std::construct_at(&_error, v);
   }
 
   constexpr result(Err&& v) noexcept
-  : _error{std::forward<Err>(v)}
-  , _has_value{false}
+  : _error(std::forward<Err>(v))
+  , _has_value(false)
   {
     //std::construct_at(&_error, std::forward<Err>(v));
   }
@@ -294,24 +294,18 @@ template<typename Err>
 class result<void, Err> {
   std::optional<Err> _error;
 public:
-  constexpr result(result&& v) noexcept
-  : _error{std::move(v._error)}
-  { }
+  constexpr result(result&& v) = default;
 
-  constexpr result(const result& v) noexcept
-  : _error{v._error}
-  { }
+  constexpr result(const result& v) = default;
 
-  constexpr result() noexcept
-  : _error{}
-  { }
+  constexpr result() = default;
 
   constexpr result(Err&& err) noexcept
-  : _error{std::forward<Err>(err)}
+  : _error(std::forward<Err>(err))
   { }
 
   constexpr result(const Err& err) noexcept
-  : _error{err}
+  : _error(err)
   { }
 
   template<typename... Fn>

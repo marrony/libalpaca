@@ -3,7 +3,9 @@
 headers := $(shell find include -type f -name '*.hpp')
 srcs := $(shell find src -type f -name '*.cpp')
 
-cppflags := -Werror -Wall -Wextra -Wnon-virtual-dtor -Wpedantic -Wno-psabi -pedantic -Wold-style-cast -Wcast-align -Wunused -Wno-gnu-anonymous-struct -Wno-nested-anon-types
+cppflags_pedantic := -Wpedantic -pedantic
+
+cppflags := -Werror -Wall -Wextra -Wnon-virtual-dtor -Wno-psabi -Wold-style-cast -Wcast-align -Wunused -Wno-gnu-anonymous-struct -Wno-nested-anon-types
 
 bin:
 	mkdir -p bin

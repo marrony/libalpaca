@@ -67,12 +67,12 @@ int main(int argc, char** argv) {
   if (conform)
     std::cout << "Running in conform mode" << std::endl;
 
-  std::shared_ptr<celestron::nexstar_protocol> protocol;
-
-  if (conform)
-    protocol = std::make_shared<celestron::simulator_protocol>();
-  else
-    protocol = std::make_shared<celestron::serial_protocol>(device, baud);
+  auto protocol = [device, baud, conform]() -> std::unique_ptr<celestron::nexstar_protocol> {
+    if (conform)
+      return std::make_unique<celestron::simulator_protocol>();
+    else
+      return std::make_unique<celestron::serial_protocol>(device, baud);
+  }();
 
   alpaca::telescopeinfo_t info = {
     .description = "Generic Celestron",
@@ -100,7 +100,7 @@ int main(int argc, char** argv) {
              alpaca::telescope_flags_t::can_move_axis_1
   };
 
-  celestron::celestron_telescope tel0(info, protocol);
+  celestron::celestron_telescope tel0(info, std::move(protocol));
 
   alpaca::device_manager manager;
   manager.add_telescope(&tel0);

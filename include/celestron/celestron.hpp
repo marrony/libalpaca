@@ -481,7 +481,7 @@ struct nexstar_protocol {
     return angle;
   }
 
-  bool get_ra_de(float* ra, float* de, bool precise) {
+  bool get_ra_de(alpaca::coord_t* coord, bool precise) {
     const char command[] = { precise ? 'e' : 'E' };
     char output[19];
     std::uint32_t ra_int, de_int;
@@ -498,24 +498,24 @@ struct nexstar_protocol {
     if (std::sscanf(output, "%x,%x#", &ra_int, &de_int) != 2)
       return false;
 
-    *ra = nexstar_to_degree(ra_int, precise) / 15.0f;
-    *de = nexstar_to_degree(de_int, precise);
+    coord->rightascension = nexstar_to_degree(ra_int, precise) / 15.0f;
+    coord->declination = nexstar_to_degree(de_int, precise);
 
     return true;
   }
 
-  bool goto_ra_de(float ra, float de, bool precise) {
+  bool goto_ra_de(alpaca::coord_t coord, bool precise) {
     char command[19];
     char output[1];
 
     int size = precise ? 18 : 10;
     const char* fmt = precise ? "r%08X,%08X" : "R%04X,%04X";
 
-    if (de < 0.0f)
-      de += 360.0f;
+    if (coord.declination < 0.0f)
+      coord.declination += 360.0f;
 
-    std::uint32_t ra_int = degree_to_nexstar(ra * 15.0f, precise);
-    std::uint32_t de_int = degree_to_nexstar(de, precise);
+    std::uint32_t ra_int = degree_to_nexstar(coord.rightascension * 15.0f, precise);
+    std::uint32_t de_int = degree_to_nexstar(coord.declination, precise);
 
     std::snprintf(command, size + 1, fmt, ra_int, de_int);
 
@@ -527,7 +527,7 @@ struct nexstar_protocol {
     return true;
   }
 
-  bool get_azm_alt(float* azm, float* alt, bool precise) {
+  bool get_azm_alt(alpaca::altazm_t* altazm, bool precise) {
     const char command[] = { precise ? 'z' : 'Z' };
     char output[19];
     std::uint32_t alt_int, azm_int;
@@ -544,8 +544,8 @@ struct nexstar_protocol {
     if (std::sscanf(output, "%x,%x#", &azm_int, &alt_int) != 2)
       return false;
 
-    *azm = nexstar_to_degree(azm_int, precise);
-    *alt = nexstar_to_degree(alt_int, precise);
+    altazm->azimuth = nexstar_to_degree(azm_int, precise);
+    altazm->altitude = nexstar_to_degree(alt_int, precise);
 
     return true;
   }
@@ -616,8 +616,8 @@ struct nexstar_protocol {
     return response.parse();
   }
 
-  [[nodiscard]] bool slew_variable(int axis, float rate) {
-    const slew_variable_command_t slew_command{axis, rate};
+  [[nodiscard]] bool slew_variable(const alpaca::move_t& move) {
+    const slew_variable_command_t slew_command{move.axis, move.rate};
     response_t<void> response;
 
     int nbytes = send_command(slew_command.data, sizeof(slew_command), response.data, sizeof(response));
@@ -1049,21 +1049,21 @@ return [
 #endif
 
 class celestron_telescope : public alpaca::telescope {
-  std::shared_ptr<nexstar_protocol> protocol;
+  std::unique_ptr<nexstar_protocol> protocol;
 
  public:
   celestron_telescope(
     const alpaca::telescopeinfo_t& info,
-    const std::shared_ptr<nexstar_protocol>& protocol)
+    std::unique_ptr<nexstar_protocol>&& protocol)
   : alpaca::telescope(info)
-  , protocol(protocol)
+  , protocol(std::move(protocol))
   { }
 
-  virtual ~celestron_telescope()
+  virtual ~celestron_telescope() override
   { }
 
   // device
-  virtual alpaca::return_t<alpaca::deviceinfo_t> get_deviceinfo() const {
+  virtual alpaca::return_t<alpaca::deviceinfo_t> get_deviceinfo() const override {
     int model = 0;
 
     return check_op(protocol->get_model(&model))
@@ -1080,55 +1080,55 @@ class celestron_telescope : public alpaca::telescope {
   // telescope
 
   // read-only properties
-  virtual alpaca::return_t<float> get_altitude() const {
-    float azm = 0, alt = 0;
+  virtual alpaca::return_t<float> get_altitude() const override {
+    alpaca::altazm_t altazm = {0, 0};
 
-    return check_op(protocol->get_azm_alt(&azm, &alt, false))
-      .map([alt]() {
-        return alt;
+    return check_op(protocol->get_azm_alt(&altazm, false))
+      .map([altazm]() {
+        return altazm.altitude;
       });
   }
 
-  virtual alpaca::return_t<float> get_azimuth() const {
-    float azm = 0, alt = 0;
+  virtual alpaca::return_t<float> get_azimuth() const override {
+    alpaca::altazm_t altazm = {0, 0};
 
-    return check_op(protocol->get_azm_alt(&azm, &alt, false))
-      .map([azm]() {
-        return azm;
+    return check_op(protocol->get_azm_alt(&altazm, false))
+      .map([altazm]() {
+        return altazm.azimuth;
       });
   }
 
-  virtual alpaca::return_t<float> get_declination() const {
-    float ra = 0, de = 0;
+  virtual alpaca::return_t<float> get_declination() const override {
+    alpaca::coord_t coord = {0, 0};
 
-    return check_op(protocol->get_ra_de(&ra, &de, false))
-      .map([de]() {
-        return de;
+    return check_op(protocol->get_ra_de(&coord, false))
+      .map([coord]() {
+        return coord.declination;
       });
   }
 
-  virtual alpaca::return_t<float> get_rightascension() const {
-    float ra = 0, de = 0;
+  virtual alpaca::return_t<float> get_rightascension() const override {
+    alpaca::coord_t coord = {0, 0};
 
-    return check_op(protocol->get_ra_de(&ra, &de, false))
-      .map([ra]() {
-         return ra;
+    return check_op(protocol->get_ra_de(&coord, false))
+      .map([coord]() {
+         return coord.rightascension;
       });
   }
 
-  virtual alpaca::return_t<bool> get_athome() const {
+  virtual alpaca::return_t<bool> get_athome() const override {
     return false;
   }
 
-  virtual alpaca::return_t<bool> get_atpark() const {
+  virtual alpaca::return_t<bool> get_atpark() const override {
     return false;
   }
 
-  virtual alpaca::return_t<bool> get_ispulseguiding() const {
+  virtual alpaca::return_t<bool> get_ispulseguiding() const override {
     return false;
   }
 
-  virtual alpaca::return_t<bool> get_slewing() const {
+  virtual alpaca::return_t<bool> get_slewing() const override {
     bool is_slewing = false;
     return check_op(protocol->is_goto_in_progress(&is_slewing))
       .map([is_slewing]() {
@@ -1136,7 +1136,7 @@ class celestron_telescope : public alpaca::telescope {
       });
   }
 
-  virtual alpaca::return_t<float> get_siderealtime() const {
+  virtual alpaca::return_t<float> get_siderealtime() const override {
     float latitude = 0, longitude = 0;
 
     return check_op(protocol->get_location(&latitude, &longitude))
@@ -1145,12 +1145,12 @@ class celestron_telescope : public alpaca::telescope {
       });
   }
 
-  virtual alpaca::return_t<alpaca::destination_side_of_pier_t> get_destinationsideofpier(float, float) const {
+  virtual alpaca::return_t<alpaca::destination_side_of_pier_t> get_destinationsideofpier(const alpaca::coord_t&) const override {
     return alpaca::destination_side_of_pier_t::pier_unknown;
   }
 
   // read-wrie properties
-  virtual alpaca::return_t<float> get_sitelatitude() const {
+  virtual alpaca::return_t<float> get_sitelatitude() const override {
     float latitude = 0, longitude = 0;
 
     return check_op(protocol->get_location(&latitude, &longitude))
@@ -1159,7 +1159,7 @@ class celestron_telescope : public alpaca::telescope {
       });
   }
 
-  virtual alpaca::return_t<void> put_sitelatitude(float angle) {
+  virtual alpaca::return_t<void> put_sitelatitude(float angle) override {
     float latitude = 0, longitude = 0;
 
     return check_op(protocol->get_location(&latitude, &longitude))
@@ -1168,7 +1168,7 @@ class celestron_telescope : public alpaca::telescope {
       });
   }
 
-  virtual alpaca::return_t<float> get_sitelongitude() const {
+  virtual alpaca::return_t<float> get_sitelongitude() const override {
     float latitude = 0, longitude = 0;
 
     return check_op(protocol->get_location(&latitude, &longitude))
@@ -1177,7 +1177,7 @@ class celestron_telescope : public alpaca::telescope {
       });
   }
 
-  virtual alpaca::return_t<void> put_sitelongitude(float angle) {
+  virtual alpaca::return_t<void> put_sitelongitude(float angle) override {
     float latitude = 0, longitude = 0;
 
     return check_op(protocol->get_location(&latitude, &longitude))
@@ -1186,33 +1186,32 @@ class celestron_telescope : public alpaca::telescope {
       });
   }
 
-  float targetdeclination = 100;
-  float targetrightascension = 100;
-  virtual alpaca::return_t<float> get_targetdeclination() const {
-    return check_set(targetdeclination < 100)
+  alpaca::coord_t target = {100, 100};
+  virtual alpaca::return_t<float> get_targetdeclination() const override {
+    return check_set(target.declination < 100)
       .map([this]() {
-        return targetdeclination;
+        return target.declination;
       });
   }
 
-  virtual alpaca::return_t<void> put_targetdeclination(float targetdeclination) {
-    this->targetdeclination = targetdeclination;
+  virtual alpaca::return_t<void> put_targetdeclination(float targetdeclination) override {
+    this->target.declination = targetdeclination;
     return {};
   }
 
-  virtual alpaca::return_t<float> get_targetrightascension() const {
-    return check_set(targetrightascension < 100)
+  virtual alpaca::return_t<float> get_targetrightascension() const override {
+    return check_set(target.rightascension < 100)
       .map([this]() {
-        return targetrightascension;
+        return target.rightascension;
       });
   }
 
-  virtual alpaca::return_t<void> put_targetrightascension(float targetrightascension) {
-    this->targetrightascension = targetrightascension;
+  virtual alpaca::return_t<void> put_targetrightascension(float targetrightascension) override {
+    this->target.rightascension = targetrightascension;
     return {};
   }
 
-  virtual alpaca::return_t<bool> get_tracking() const {
+  virtual alpaca::return_t<bool> get_tracking() const override {
     tracking_mode_kind mode = tracking_mode_kind::off;
     return check_op(protocol->get_tracking_mode(&mode))
       .map([mode]() {
@@ -1220,97 +1219,94 @@ class celestron_telescope : public alpaca::telescope {
       });
   }
 
-  virtual alpaca::return_t<void> put_tracking(bool tracking) {
+  virtual alpaca::return_t<void> put_tracking(bool tracking) override {
     tracking_mode_kind mode = tracking ? tracking_mode_kind::eq_north : tracking_mode_kind::off;
 
     return check_op(protocol->set_tracking_mode(mode));
   }
 
-  virtual alpaca::return_t<alpaca::driver_rate_t> get_trackingrate() const {
+  virtual alpaca::return_t<alpaca::driver_rate_t> get_trackingrate() const override {
     return alpaca::driver_rate_t::sidereal;
   }
 
-  virtual alpaca::return_t<void> put_trackingrate(alpaca::driver_rate_t) {
+  virtual alpaca::return_t<void> put_trackingrate(alpaca::driver_rate_t) override {
     return {};
   }
 
-  virtual alpaca::return_t<void> get_utctm(alpaca::utcdate_t* utcdate) const {
+  virtual alpaca::return_t<void> get_utctm(alpaca::utcdate_t* utcdate) const override {
     return check_op(protocol->get_utcdate(utcdate));
   }
 
-  virtual alpaca::return_t<void> put_utctm(alpaca::utcdate_t utcdate) {
+  virtual alpaca::return_t<void> put_utctm(alpaca::utcdate_t utcdate) override {
     return check_op(protocol->set_utcdate(utcdate));
   }
 
   // operations
-  virtual alpaca::return_t<void> abortslew() {
+  virtual alpaca::return_t<void> abortslew() override {
     return check_op(protocol->cancel_goto());
   }
 
-  virtual alpaca::return_t<void> findhome() {
+  virtual alpaca::return_t<void> findhome() override {
     return {};
   }
 
-  virtual alpaca::return_t<void> moveaxis(int axis, float rate) {
-    return check_op(protocol->slew_variable(axis, rate));
+  virtual alpaca::return_t<void> moveaxis(const alpaca::move_t& move) override {
+    return check_op(protocol->slew_variable(move));
   }
 
-  virtual alpaca::return_t<void> park() {
+  virtual alpaca::return_t<void> park() override {
     return {};
   }
 
-  virtual alpaca::return_t<void> pulseguide(int, int) {
+  virtual alpaca::return_t<void> pulseguide(const alpaca::pulse_t&) override {
     return {};
   }
 
-  virtual alpaca::return_t<void> setpark() {
+  virtual alpaca::return_t<void> setpark() override {
     return {};
   }
 
-  virtual alpaca::return_t<void> slewtoaltaz(float, float) {
+  virtual alpaca::return_t<void> slewtoaltaz(const alpaca::altazm_t&) override {
     return {};
   }
 
-  virtual alpaca::return_t<void> slewtoaltazasync(float, float) {
+  virtual alpaca::return_t<void> slewtoaltazasync(const alpaca::altazm_t&) override {
     return {};
   }
 
-  virtual alpaca::return_t<void> slewtocoordinates(float, float) {
+  virtual alpaca::return_t<void> slewtocoordinates(const alpaca::coord_t&) override {
     return {};
   }
 
-  virtual alpaca::return_t<void> slewtocoordinatesasync(float rightascension, float declination) {
-    targetrightascension = rightascension;
-    targetdeclination = declination;
-    return check_op(protocol->goto_ra_de(rightascension, declination, false));
+  virtual alpaca::return_t<void> slewtocoordinatesasync(const alpaca::coord_t& target) override {
+    this->target = target;
+    return check_op(protocol->goto_ra_de(target, false));
   }
 
-  virtual alpaca::return_t<void> slewtotarget() {
+  virtual alpaca::return_t<void> slewtotarget() override {
     return {};
   }
 
-  virtual alpaca::return_t<void> slewtotargetasync() {
-    return check_op(protocol->goto_ra_de(targetrightascension, targetdeclination, false));
+  virtual alpaca::return_t<void> slewtotargetasync() override {
+    return check_op(protocol->goto_ra_de(target, false));
   }
 
-  virtual alpaca::return_t<void> synctoaltaz(float, float) {
+  virtual alpaca::return_t<void> synctoaltaz(const alpaca::altazm_t&) override {
     return {};
   }
 
-  virtual alpaca::return_t<void> synctocoordinates(
-    float rightascension, float declination) {
-    targetrightascension = rightascension;
-    targetdeclination = declination;
+  virtual alpaca::return_t<void> synctocoordinates(const alpaca::coord_t& coord) override {
+    target = coord;
 
-    return check_op(protocol->goto_ra_de(rightascension, declination, false));
+    return check_op(protocol->goto_ra_de(target, false));
   }
 
-  virtual alpaca::return_t<void> synctotarget() {
+  virtual alpaca::return_t<void> synctotarget() override {
     //protocol->goto_ra_de(target_ra, target_de);
     return {};
   }
 
-  virtual alpaca::return_t<void> unpark() {
+  virtual alpaca::return_t<void> unpark() override {
     return {};
   }
 };

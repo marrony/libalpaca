@@ -52,6 +52,10 @@ class alpaca_resource : public httpserver::http_resource {
     return std::make_shared<httpserver::string_response>(msg, 400);
   }
 
+  std::shared_ptr<httpserver::http_response> conv_error(const alpaca_error& error) {
+    return std::make_shared<httpserver::string_response>(error.error_message, error.error_number - 0x1000);
+  }
+
   std::shared_ptr<httpserver::http_response> ok(const json_value& response) {
     std::ostringstream os;
 
@@ -127,6 +131,10 @@ class alpaca_resource : public httpserver::http_resource {
             return ok(create_output(value, 0, ""));
           },
           [&](const alpaca_error& error) {
+            if (error.error_number >= 0x1000) {
+              return conv_error(error);
+            }
+
             return ok(create_output(
               static_cast<json_value>(nullptr),
               error.error_number,

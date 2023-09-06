@@ -62,6 +62,10 @@ auto custom_error(const std::string& str) {
   return alpaca_error{0x500, str};
 }
 
+auto http_error(int status_code, const std::string& str) {
+  return alpaca_error{0x1000 + status_code, str};
+}
+
 }  // namespace alpaca
 
 #endif  // INCLUDE_ERRORS_HPP_

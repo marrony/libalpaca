@@ -236,8 +236,7 @@ class telescope : public device {
       [this]() {
         return get_ispulseguiding();
       },
-      check_connected(),
-      check_flag(get_canpulseguide())
+      check_connected()
     );
   }
 
@@ -790,13 +789,13 @@ class telescope : public device {
 
   // read-wrie properties
   virtual return_t<float> get_declinationrate() const {
-    return not_implemented();
+    return 0.0f;
   }
   virtual return_t<void> put_declinationrate(float) {
     return not_implemented();
   }
   virtual return_t<float> get_rightascensionrate() const {
-    return not_implemented();
+    return 0.0f;
   }
   virtual return_t<void> put_rightascensionrate(float) {
     return not_implemented();

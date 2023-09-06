@@ -42,7 +42,7 @@ class device {
   }
 
   [[nodiscard]]
-  inline auto check_flag(const return_t<bool>& flag) const -> check_t {
+  inline auto check_flag(return_t<bool>&& flag) const -> check_t {
     return flag.flat_map([](bool flag) -> check_t {
       if (!flag) return not_implemented();
 
@@ -153,13 +153,13 @@ class device_resource : public alpaca_resource {
     const arguments_t& args) {
 
     if (req.get_path_piece(2) != device_type) {
-      return custom_error("not found");
+      return http_error(404, "not found");
     }
 
     int device_id = util::parse_int(req.get_path_piece(3), -1);
 
     if (device_id < 0 || static_cast<std::size_t>(device_id) > devices.size()) {
-      return custom_error("not found");
+      return http_error(404, "not found");
     }
 
     T* device = devices[device_id];
@@ -171,7 +171,7 @@ class device_resource : public alpaca_resource {
       if (op != get_operations.end()) {
         return op->second(device, args);
       } else {
-        return custom_error("not found");
+        return http_error(404, "not found");
       }
     }
 
@@ -182,11 +182,11 @@ class device_resource : public alpaca_resource {
           return static_cast<json_value>( nullptr );
         });
       } else {
-        return custom_error("not found");
+        return http_error(404, "not found");
       }
     }
 
-    return custom_error("bad request");
+    return http_error(400, "bad request");
   }
 
  public:

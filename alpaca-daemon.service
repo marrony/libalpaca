@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/alpaca-daemon --device /dev/ttyUSB0 --baud 9600
+ExecStart=/usr/local/bin/alpaca-daemon --device /dev/ttyUSB_AVX --baud 9600
 KillMode=process
 Restart=on-failure
 

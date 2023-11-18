@@ -35,6 +35,8 @@ install:
 	systemctl stop alpaca-daemon.service || echo "alpaca deamon not installed"
 	cp alpaca-daemon.service /etc/systemd/system/alpaca-daemon.service
 	cp bin/alpaca-daemon /usr/local/bin/alpaca-daemon
+	cp 00-celestron.rules /etc/udev/rules.d/00-celestron.rules
+	udevadm trigger
 	systemctl daemon-reload
 	systemctl enable alpaca-daemon.service
 	systemctl start alpaca-daemon.service
